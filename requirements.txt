@@ -1,0 +1,20 @@
+-i https://pypi.org/simple
+annotated-types==0.5.0; python_version >= '3.7'
+attrs==23.1.0; python_version >= '3.7'
+certifi==2023.7.22; python_version >= '3.6'
+cffi==1.15.1
+cfgrib==0.9.10.4
+charset-normalizer==3.2.0; python_full_version >= '3.7.0'
+click==8.1.7; python_version >= '3.7'
+eccodes==1.6.0
+findlibs==0.0.5
+idna==3.4; python_version >= '3.5'
+numpy==1.25.2; python_version >= '3.9'
+pycparser==2.21
+pydantic==2.3.0
+pydantic-core==2.6.3; python_version >= '3.7'
+requests==2.31.0
+types-requests==2.31.0.2
+types-urllib3==1.26.25.14
+typing-extensions==4.7.1; python_version >= '3.7'
+urllib3==2.0.4; python_version >= '3.7'
