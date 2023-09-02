@@ -1,6 +1,5 @@
 from pydantic import BaseModel, Field, model_validator, computed_field
-
-from typing import Iterable
+from typing import Sequence
 
 
 LatitudeField = Field(ge=-90, le=90)
@@ -42,7 +41,7 @@ class Extent(BaseModel):
 class Region(BaseModel):
     name: str
     extent: Extent
-    labels: Iterable[Label] = []
+    labels: Sequence[Label] = []
     display_counties: bool = False
 
 
@@ -54,8 +53,24 @@ FRONT_RANGE_LABELS = [
 ]
 
 FRONT_RANGE = Region(
-    name="Front Range",
+    name="frange",
     extent=FRONT_RANGE_EXTENT,
     labels=FRONT_RANGE_LABELS,
     display_counties=True,
 )
+
+
+WASATCH_EXTENT = Extent(top=41.5, bottom=40, left=-112.5, right=-111.0)
+
+WASATCH_LABELS = [
+    Label(text="Powder Mtn", lat=41.38, lon=-111.78),
+    Label(text="Snowbasin", lat=41.2, lon=-111.855),
+    Label(text="Alta-Snowbird", lat=40.577, lon=-111.63),
+    Label(text="Park City-Deer Valley", lat=40.625, lon=-111.5),
+]
+
+WASATCH = Region(
+    name="wasatch", extent=WASATCH_EXTENT, labels=WASATCH_LABELS, display_counties=True
+)
+
+HREF_REGIONS = [FRONT_RANGE, WASATCH]
