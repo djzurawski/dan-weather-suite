@@ -1,4 +1,4 @@
-from typing import Literal, Tuple, Dict
+from typing import Literal, Tuple, Dict, Sequence
 from datetime import datetime, timedelta, date
 import requests
 import os
@@ -6,8 +6,10 @@ import logging
 from concurrent.futures import ThreadPoolExecutor
 import subprocess
 
-from dan_weather_suite.plotting.regions.models import Region
-from dan_weather_suite.plotting.regions.href import FRONT_RANGE
+from dan_weather_suite.plotting.regions import Region, Extent, HREF_REGIONS
+
+import haversine
+
 
 import cfgrib
 from dan_weather_suite.plotting import plot
@@ -25,13 +27,19 @@ UrlParams = Dict[str, str | int | float]
 
 FORECAST_LENGTH = 48  # hours
 
-PRODUCTS = ["mean", "lpmm", "sprd"]
+ALL_PRODUCTS = ["mean", "lpmm", "sprd"]
+
+MM_PER_IN = 25.4
+
+
+def datetime64_to_datetime(dt: np.datetime64) -> datetime:
+    return datetime.utcfromtimestamp(int(dt) / 1e9)
 
 
 def select_cycle(dt: datetime) -> Cycle:
     """Empirically figured out the most recent available HREF cycle"""
     utc_hour = dt.hour
-    if utc_hour > 15 or utc_hour < 4:
+    if utc_hour > 15 or utc_hour < 3:
         return "12z"
     else:
         return "00z"
@@ -41,7 +49,7 @@ def select_day(dt: datetime) -> date:
     """Selects day of most recent HREF run"""
 
     hour = dt.hour
-    if hour < 4:
+    if hour < 3:
         return dt.date() - timedelta(days=1)
     else:
         return dt.date()
@@ -83,6 +91,7 @@ def download_grib(
     params: UrlParams = {
         "file": f"href.t{cycle}.conus.{product}.f{fhour_str}.grib2",
         "lev_surface": "on",
+        "subregion": "",
         "leftlon": left_lon,
         "rightlon": right_lon,
         "toplat": top_lat,
@@ -90,14 +99,16 @@ def download_grib(
         "dir": f"/href.{day_str}/ensprod",
     }
 
-    resp = requests.get(grib_filter_base_url, params=params, stream=True)
+    resp = requests.get(
+        grib_filter_base_url, params=params, stream=True, allow_redirects=True
+    )
 
     if not os.path.exists(save_directory):
         os.makedirs(save_directory)
 
     save_path = os.path.join(save_directory, filename)
 
-    if resp.status_code == 200 or resp.status_code == 302:
+    if resp.status_code == 200:
         with open(save_path, "wb") as f:
             for chunk in resp.iter_content(chunk_size=8192):
                 f.write(chunk)
@@ -128,11 +139,11 @@ def combine_grib_files(cycle, product, grib_dir="grib"):
         subprocess.call(cat_command, shell=True)
 
 
-def download_forecast(day: date, cycle: Cycle, product: Product, region: Region):
-    top_lat = region.extent.top
-    bottom_lat = region.extent.bottom
-    left_lon = region.extent.left
-    right_lon = region.extent.right
+def download_forecast(day: date, cycle: Cycle, product: Product, extent: Extent):
+    top_lat = extent.top
+    bottom_lat = extent.bottom
+    left_lon = extent.left
+    right_lon = extent.right
 
     fhours = range(1, FORECAST_LENGTH + 1)
     with ThreadPoolExecutor(max_workers=4) as executor:
@@ -154,83 +165,123 @@ def download_forecast(day: date, cycle: Cycle, product: Product, region: Region)
         [f.result() for f in futures]
 
 
-def download_gribs(day, cycle, product):
-    for product in PRODUCTS:
-        download_forecast(day, cycle, product, FRONT_RANGE)
-        combine_grib_files(cycle, product)
+def max_extent(extents: Sequence[Extent]) -> Extent:
+    top = max([e.top for e in extents])
+    bottom = min([e.bottom for e in extents])
+    left = min([e.left for e in extents])
+    right = max([e.right for e in extents])
+
+    return Extent(top=top, bottom=bottom, left=left, right=right)
 
 
-def make_plots(cycle):
-    regions = [FRONT_RANGE]
-    for product in PRODUCTS:
-        ds = cfgrib.open_dataset(f"grib/href.t{cycle}.conus.{product}_combined.grib2")
+def download_gribs(day: date, cycle: Cycle, product: Product, extent: Extent):
+    download_forecast(day, cycle, product, extent)
+    combine_grib_files(cycle, product)
 
-        MM_PER_IN = 25.4
 
-        cum_precip_in = np.cumsum(ds.tp, axis=0) / MM_PER_IN
-        for i, forecast in enumerate(cum_precip_in):
-            fhour = i + 1
-            fhour_str = str(fhour).zfill(2)
-            print(fhour)
-            init_time = forecast.time
-            valid_time = forecast.valid_time
+def combined_gribfile(cycle: Cycle, product: Product) -> str:
+    return f"grib/href.t{cycle}.conus.{product}_combined.grib2"
 
-            fig, ax = plot.create_basemap()
-            fig, ax = plot.add_contourf(
-                fig,
-                ax,
-                ds.longitude,
-                ds.latitude,
-                forecast,
-                levels=plot.PRECIP_CLEVS,
-                colors=plot.PRECIP_CMAP_DATA,
+
+def cumsum_precip_in(ds):
+    "Accumulates precip over fhours and converts mm precip to in"
+    return np.cumsum(ds.tp, axis=0) / MM_PER_IN
+
+
+def make_surface_plots(cycle: Cycle, product: Product, regions: Sequence[Region]):
+    ds = cfgrib.open_dataset(combined_gribfile(cycle, product))
+
+    cum_precip_in = cumsum_precip_in(ds)
+    for i, forecast in enumerate(cum_precip_in):
+        fhour = i + 1
+        fhour_str = str(fhour).zfill(2)
+        print(fhour)
+        init_time = datetime64_to_datetime(forecast.time)
+        valid_time = datetime64_to_datetime(forecast.valid_time)
+
+        plot.make_title_str(init_time, valid_time, fhour, product, "HREF", "in")
+
+        fig, ax = plot.create_basemap()
+        fig, ax = plot.add_contourf(
+            fig,
+            ax,
+            ds.longitude,
+            ds.latitude,
+            forecast,
+            levels=plot.PRECIP_CLEVS,
+            colors=plot.PRECIP_CMAP_DATA,
+        )
+
+        for region in regions:
+            ax.set_extent(
+                [
+                    region.extent.left,
+                    region.extent.right,
+                    region.extent.bottom,
+                    region.extent.top,
+                ]
             )
+            fig, ax = plot.add_labels(fig, ax, region.labels)
+            fig.savefig(f"href.{cycle}.{region.name}.{product}.f{fhour_str}.png")
 
-            fig.savefig(f"href.{cycle}.conus.{product}.f{fhour_str}.png")
+        plt.close(fig)
 
-            for region in regions:
-                ax.set_extent(
-                    [
-                        FRONT_RANGE.extent.left,
-                        FRONT_RANGE.extent.right,
-                        FRONT_RANGE.extent.bottom,
-                        FRONT_RANGE.extent.top,
-                    ]
+
+def nearest_point(ds, lon, lat):
+    """Finds the nearest lat/lon and (x,y) index for given lat/lon
+    in xarray.Dataset"""
+
+    def haver(ds_lat, ds_lon):
+        if ds_lon > 180 or ds_lon < 0:
+            ds_lon = ds_lon - 360
+        return haversine.haversine((lat, lon), (ds_lat, ds_lon))
+
+    vectorized_haver = np.vectorize(haver)
+
+    distances = vectorized_haver(ds.latitude, ds.longitude)
+    # https://docs.scipy.org/doc/numpy/reference/generated/numpy.argmin.html
+    #  - example with np.unravel_index
+    lat_idx, lon_idx = np.unravel_index(
+        np.argmin(distances, axis=None), distances.shape
+    )
+    nearest = ds.sel(x=lon_idx, y=lat_idx)
+    nearest_lat = float(nearest.latitude.values)
+    nearest_lon = float(nearest.longitude.values)
+    if nearest_lon > 180 or nearest_lon < 0:
+        nearest_lon = nearest_lon - 360
+
+    return ((lon_idx, lat_idx), (nearest_lon, nearest_lat))
+
+
+def make_point_plots(cycle: Cycle, regions: Sequence[Region]):
+    for region in regions:
+        for label in region.labels:
+            plt.figure(figsize=(12, 7))
+            for product in ALL_PRODUCTS:
+                ds = cfgrib.open_dataset(combined_gribfile(cycle, product))
+                ds_cum = cumsum_precip_in(ds)
+                ((x_idx, y_idx), (nearest_lon, nearest_lat)) = nearest_point(
+                    ds, label.lon, label.lat
                 )
-                fig.savefig(f"href.{cycle}.{region.name}.{product}.f{fhour_str}.png")
 
-            plt.close(fig)
+                ds_loc = ds_cum.sel(x=x_idx, y=y_idx)
+
+                x = [(ds_loc.time + step).values for step in ds_loc.step]
+                y = ds_loc
+                plt.plot(x, y, label=product)
+
+            plt.title(label.text)
+            plt.legend()
+            plt.savefig(f"{label.text}.png")
 
 
 def main():
     day, cycle = latest_date_and_cycle(datetime.utcnow())
-    cycle = "12z"
 
+    download_extent = max_extent([r.extent for r in HREF_REGIONS])
 
-def tst():
-    f = "/home/dan/Sourcecode/dan-weather-suite/grib/href.t12z.conus.mean_combined.grib2"
-    ds = cfgrib.open_dataset(f)
+    for product in ALL_PRODUCTS:
+        download_gribs(day, cycle, product, download_extent)
 
-    dsc = np.cumsum(ds.tp, axis=0)
-
-    fig, ax = plot.create_basemap()
-
-    fig, ax = plot.add_contourf(
-        fig,
-        ax,
-        ds.longitude,
-        ds.latitude,
-        dsc[-1],
-    )
-    fig.savefig("test.png")
-
-    ax.set_extent(
-        [
-            FRONT_RANGE.extent.left,
-            FRONT_RANGE.extent.right,
-            FRONT_RANGE.extent.bottom,
-            FRONT_RANGE.extent.top,
-        ]
-    )
-
-    fig.savefig("test2.png")
+    for product in ALL_PRODUCTS:
+        make_surface_plots(cycle, product, HREF_REGIONS)
