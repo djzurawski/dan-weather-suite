@@ -1,11 +1,27 @@
 import matplotlib.pyplot as plt
 from matplotlib.cm import get_cmap
 import cartopy.crs as crs
-from cartopy.feature import NaturalEarthFeature
-from cartopy.feature import STATES
+from cartopy.feature import NaturalEarthFeature, STATES, ShapelyFeature
+import cartopy.io.shapereader as shpreader
+
+import pooch
+from zipfile import ZipFile
 
 import matplotlib.colors as mcolors
 import numpy as np
+import os
+
+
+COUNTY_SHAPEFILE = "cb_2018_us_county_20m.shp"
+
+if not os.path.isfile(f"resources/{COUNTY_SHAPEFILE}"):
+    county_shp_zip = pooch.retrieve(
+        "https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_county_20m.zip",
+        known_hash="md5:c93b7a2bcc012687ea1e60cad128ecea",
+    )
+    with ZipFile(county_shp_zip) as myzip:
+        myzip.extractall("resources")
+
 
 M_PER_S_TO_KT = 1.94384
 MM_TO_IN = 0.03937008
@@ -168,6 +184,12 @@ RH_LEVELS = [
 ]
 
 
+def create_feature(shapefile, projection=crs.PlateCarree()):
+    reader = shpreader.Reader(shapefile)
+    feature = list(reader.geometries())
+    return ShapelyFeature(feature, projection)
+
+
 def get_barb_interval(domain):
     if domain == "d02":
         return 6
@@ -199,7 +221,7 @@ def add_title(
     return fig, ax
 
 
-def create_basemap(projection=crs.PlateCarree()):
+def create_basemap(projection=crs.PlateCarree(), display_counties=True):
     fig, ax = plt.subplots(figsize=(18, 10), subplot_kw={"projection": projection})
     # fig = plt.figure(figsize=(18, 10))
     # ax = plt.axes(projection=projection)
@@ -215,8 +237,13 @@ def create_basemap(projection=crs.PlateCarree()):
     ax.add_feature(lakes, facecolor="none", edgecolor="blue", linewidth=0.5)
     ax.add_feature(STATES, edgecolor="black")
 
-    # ax.add_feature(USCOUNTIES.with_scale(county_scale), edgecolor="gray")
-    # ax.add_feature(USSTATES.with_scale(county_scale), edgecolor="black")
+    if display_counties:
+        counties = create_feature(f"resources/{COUNTY_SHAPEFILE}")
+        ax.add_feature(
+            counties,
+            facecolor="none",
+            edgecolor="gray",
+        )
 
     return fig, ax
 
@@ -321,6 +348,28 @@ def add_label_markers(fig, ax, labels):
         ax.text(lon, lat, text, horizontalalignment="left", transform=crs.PlateCarree())
         ax.plot(
             lon, lat, markersize=2, marker="o", color="k", transform=crs.PlateCarree()
+        )
+
+    return fig, ax
+
+
+def add_labels(fig, ax, labels):
+    """labels: ('text', (lon, lat))"""
+    for label in labels:
+        ax.text(
+            label.lon,
+            label.lat,
+            label.text,
+            horizontalalignment="left",
+            transform=crs.PlateCarree(),
+        )
+        ax.plot(
+            label.lon,
+            label.lat,
+            markersize=2,
+            marker="o",
+            color="k",
+            transform=crs.PlateCarree(),
         )
 
     return fig, ax
