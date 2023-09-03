@@ -10,6 +10,8 @@ from dan_weather_suite.plotting.regions import Region, Extent, HREF_REGIONS
 
 import haversine
 
+import xarray as xr
+
 
 import cfgrib
 from dan_weather_suite.plotting import plot
@@ -27,7 +29,7 @@ UrlParams = Dict[str, str | int | float]
 
 FORECAST_LENGTH = 48  # hours
 
-ALL_PRODUCTS = ["mean", "lpmm", "sprd"]
+ALL_PRODUCTS: Sequence[Product] = ["mean", "lpmm", "sprd"]
 
 MM_PER_IN = 25.4
 
@@ -195,7 +197,6 @@ def make_surface_plots(cycle: Cycle, product: Product, regions: Sequence[Region]
     for i, forecast in enumerate(cum_precip_in):
         fhour = i + 1
         fhour_str = str(fhour).zfill(2)
-        print(fhour)
         init_time = datetime64_to_datetime(forecast.time)
         valid_time = datetime64_to_datetime(forecast.valid_time)
 
@@ -222,16 +223,18 @@ def make_surface_plots(cycle: Cycle, product: Product, regions: Sequence[Region]
                 ]
             )
             fig, ax = plot.add_labels(fig, ax, region.labels)
-            fig.savefig(f"href.{cycle}.{region.name}.{product}.f{fhour_str}.png")
+            fname = f"href.{cycle}.{region.name}.{product}.f{fhour_str}.png"
+            logging.info(f"Saving {fname}")
+            fig.savefig(f"images/{fname}")
 
         plt.close(fig)
 
 
-def nearest_point(ds, lon, lat):
+def nearest_point(ds: xr.Dataset, lon: float, lat: float):
     """Finds the nearest lat/lon and (x,y) index for given lat/lon
     in xarray.Dataset"""
 
-    def haver(ds_lat, ds_lon):
+    def haver(ds_lat: float, ds_lon: float):
         if ds_lon > 180 or ds_lon < 0:
             ds_lon = ds_lon - 360
         return haversine.haversine((lat, lon), (ds_lat, ds_lon))
@@ -250,7 +253,7 @@ def nearest_point(ds, lon, lat):
     if nearest_lon > 180 or nearest_lon < 0:
         nearest_lon = nearest_lon - 360
 
-    return ((lon_idx, lat_idx), (nearest_lon, nearest_lat))
+    return (lon_idx, lat_idx), (nearest_lon, nearest_lat)
 
 
 def make_point_plots(cycle: Cycle, regions: Sequence[Region]):
@@ -259,9 +262,16 @@ def make_point_plots(cycle: Cycle, regions: Sequence[Region]):
             plt.figure(figsize=(12, 7))
             for product in ALL_PRODUCTS:
                 ds = cfgrib.open_dataset(combined_gribfile(cycle, product))
+
+                initialized = np.datetime_as_string(ds.time, unit="m", timezone="UTC")
+
                 ds_cum = cumsum_precip_in(ds)
                 ((x_idx, y_idx), (nearest_lon, nearest_lat)) = nearest_point(
                     ds, label.lon, label.lat
+                )
+
+                location_title = "{} ({}, {})".format(
+                    label.text, round(nearest_lat, 3), round(nearest_lon, 3)
                 )
 
                 ds_loc = ds_cum.sel(x=x_idx, y=y_idx)
@@ -270,9 +280,14 @@ def make_point_plots(cycle: Cycle, regions: Sequence[Region]):
                 y = ds_loc
                 plt.plot(x, y, label=product)
 
-            plt.title(label.text)
+            plt.title("HREF Initialized: " + initialized, loc="left", fontsize=18)
+            plt.title(location_title, loc="right", fontsize=18)
+
             plt.legend()
-            plt.savefig(f"{label.text}.png")
+            fname = f"{label.text}.t{cycle}.png"
+            logging.info(f"Saving {fname}")
+            plt.savefig(f"images/{fname}")
+            plt.close()
 
 
 def main():
@@ -285,3 +300,5 @@ def main():
 
     for product in ALL_PRODUCTS:
         make_surface_plots(cycle, product, HREF_REGIONS)
+
+    make_point_plots(cycle, HREF_REGIONS)
