@@ -3,6 +3,7 @@ from matplotlib.cm import get_cmap
 import cartopy.crs as crs
 from cartopy.feature import NaturalEarthFeature, STATES, ShapelyFeature
 import cartopy.io.shapereader as shpreader
+import cartopy.crs as crs
 
 import pooch
 from zipfile import ZipFile
@@ -227,7 +228,6 @@ def create_basemap(projection=crs.PlateCarree(), display_counties=True):
     # ax = plt.axes(projection=projection)
 
     border_scale = "50m"
-    county_scale = "20m"
 
     ax.coastlines(border_scale, linewidth=0.8)
 
@@ -337,6 +337,7 @@ def add_wind_barbs(
         transform=crs.PlateCarree(),
         length=barb_length,
     )
+
     return fig, ax
 
 

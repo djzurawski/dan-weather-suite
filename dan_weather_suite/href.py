@@ -19,7 +19,7 @@ import numpy as np
 
 import matplotlib.pyplot as plt
 
-LOG_FORMAT = "%(asctime)s %(message)s"
+LOG_FORMAT = "%(levelname)s %(asctime)s %(message)s"
 logging.basicConfig(format=LOG_FORMAT, level=logging.INFO)
 logger = logging.getLogger("href")
 
@@ -302,3 +302,7 @@ def main():
         make_surface_plots(cycle, product, HREF_REGIONS)
 
     make_point_plots(cycle, HREF_REGIONS)
+
+
+if __name__ == "__main__":
+    main()

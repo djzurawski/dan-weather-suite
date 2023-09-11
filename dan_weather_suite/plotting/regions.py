@@ -18,20 +18,14 @@ class Extent(BaseModel):
     left: float = LongitudeField
     right: float = LongitudeField
 
-    @model_validator(mode="before")
-    @classmethod
-    def check_event_valid(cls, data):
+    @model_validator(mode="after")
+    def check_extent_valid(self):
         "Ensures top > bottom, right > left"
-        if isinstance(data, dict):
-            top = data.get("top")
-            bottom = data.get("bottom")
-            left = data.get("left")
-            right = data.get("right")
-            if bottom >= top:
-                raise ValueError("top must be greater than bottom")
-            if left >= right:
-                raise ValueError("right must be greater than left")
-        return data
+        if self.bottom >= self.top:
+            raise ValueError("top must be greater than bottom")
+        if self.left >= self.right:
+            raise ValueError("right must be greater than left")
+        return self
 
     @computed_field
     def central_longitude(self) -> float:
