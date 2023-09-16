@@ -18,6 +18,7 @@ from dan_weather_suite.plotting import plot
 import numpy as np
 
 import matplotlib.pyplot as plt
+import argparse
 
 LOG_FORMAT = "%(levelname)s %(asctime)s %(message)s"
 logging.basicConfig(format=LOG_FORMAT, level=logging.INFO)
@@ -148,7 +149,7 @@ def download_forecast(day: date, cycle: Cycle, product: Product, extent: Extent)
     right_lon = extent.right
 
     fhours = range(1, FORECAST_LENGTH + 1)
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor() as executor:
         futures = [
             executor.submit(
                 download_grib,
@@ -190,7 +191,9 @@ def cumsum_precip_in(ds):
     return np.cumsum(ds.tp, axis=0) / MM_PER_IN
 
 
-def make_surface_plots(cycle: Cycle, product: Product, regions: Sequence[Region]):
+def make_surface_plots(
+    cycle: Cycle, product: Product, regions: Sequence[Region], output_dir: str
+):
     ds = cfgrib.open_dataset(combined_gribfile(cycle, product))
 
     cum_precip_in = cumsum_precip_in(ds)
@@ -200,20 +203,20 @@ def make_surface_plots(cycle: Cycle, product: Product, regions: Sequence[Region]
         init_time = datetime64_to_datetime(forecast.time)
         valid_time = datetime64_to_datetime(forecast.valid_time)
 
-        plot.make_title_str(init_time, valid_time, fhour, product, "HREF", "in")
-
-        fig, ax = plot.create_basemap()
-        fig, ax = plot.add_contourf(
-            fig,
-            ax,
-            ds.longitude,
-            ds.latitude,
-            forecast,
-            levels=plot.PRECIP_CLEVS,
-            colors=plot.PRECIP_CMAP_DATA,
-        )
+        title = plot.make_title_str(init_time, valid_time, fhour, product, "HREF", "in")
 
         for region in regions:
+            fig, ax = plot.create_basemap()
+            fig, ax = plot.add_contourf(
+                fig,
+                ax,
+                ds.longitude,
+                ds.latitude,
+                forecast,
+                levels=plot.PRECIP_CLEVS,
+                colors=plot.PRECIP_CMAP_DATA,
+            )
+
             ax.set_extent(
                 [
                     region.extent.left,
@@ -223,11 +226,11 @@ def make_surface_plots(cycle: Cycle, product: Product, regions: Sequence[Region]
                 ]
             )
             fig, ax = plot.add_labels(fig, ax, region.labels)
+            ax.set_title(title)
             fname = f"href.{cycle}.{region.name}.{product}.f{fhour_str}.png"
             logging.info(f"Saving {fname}")
-            fig.savefig(f"images/{fname}")
-
-        plt.close(fig)
+            fig.savefig(f"{output_dir}/{fname}", bbox_inches="tight")
+            plt.close(fig)
 
 
 def nearest_point(ds: xr.Dataset, lon: float, lat: float):
@@ -256,7 +259,7 @@ def nearest_point(ds: xr.Dataset, lon: float, lat: float):
     return (lon_idx, lat_idx), (nearest_lon, nearest_lat)
 
 
-def make_point_plots(cycle: Cycle, regions: Sequence[Region]):
+def make_point_plots(cycle: Cycle, regions: Sequence[Region], output_dir: str):
     for region in regions:
         for label in region.labels:
             plt.figure(figsize=(12, 7))
@@ -284,13 +287,13 @@ def make_point_plots(cycle: Cycle, regions: Sequence[Region]):
             plt.title(location_title, loc="right", fontsize=18)
 
             plt.legend()
-            fname = f"{label.text}.t{cycle}.png"
+            fname = f"href.{label.text}.{cycle}.meteogram.png"
             logging.info(f"Saving {fname}")
-            plt.savefig(f"images/{fname}")
+            plt.savefig(f"{output_dir}/{fname}", bbox_inches="tight")
             plt.close()
 
 
-def main():
+def main(output_dir: str = "images"):
     day, cycle = latest_date_and_cycle(datetime.utcnow())
 
     download_extent = max_extent([r.extent for r in HREF_REGIONS])
@@ -299,10 +302,15 @@ def main():
         download_gribs(day, cycle, product, download_extent)
 
     for product in ALL_PRODUCTS:
-        make_surface_plots(cycle, product, HREF_REGIONS)
+        make_surface_plots(cycle, product, HREF_REGIONS, output_dir)
 
-    make_point_plots(cycle, HREF_REGIONS)
+    make_point_plots(cycle, HREF_REGIONS, output_dir)
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Process some integers.")
+    parser.add_argument(
+        "-o", "--output-dir", help="Ouput directory for plots", default="images"
+    )
+    args = parser.parse_args()
+    main(args.output_dir)
