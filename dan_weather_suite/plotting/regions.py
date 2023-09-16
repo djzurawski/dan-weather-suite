@@ -42,13 +42,15 @@ class Region(BaseModel):
 FRONT_RANGE_EXTENT = Extent(top=40.9, bottom=38.25, left=-107.9, right=-104.6)
 
 FRONT_RANGE_LABELS = [
-    Label(text="Boulder", lat=40.01, lon=-105.27),
-    Label(text="Winter Park", lat=39.867, lon=-105.77),
     Label(text="Abasin", lat=39.635, lon=-105.871),
+    Label(text="Boulder", lat=40.01, lon=-105.27),
     Label(text="Copper", lat=39.485, lon=-106.16),
-    Label(text="Vail", lat=39.61, lon=-106.375),
+    Label(text="Eldora", lat=39.94, lon=-105.595),
     Label(text="Steamboat", lat=40.46, lon=-106.76),
+    Label(text="Vail", lat=39.61, lon=-106.375),
+    Label(text="Winter Park", lat=39.867, lon=-105.77),
 ]
+
 
 FRONT_RANGE = Region(
     name="frange",
@@ -66,6 +68,7 @@ WASATCH_LABELS = [
     Label(text="Alta-Snowbird", lat=40.577, lon=-111.63),
     Label(text="Park City-Deer Valley", lat=40.625, lon=-111.5),
 ]
+
 
 WASATCH = Region(
     name="wasatch", extent=WASATCH_EXTENT, labels=WASATCH_LABELS, display_counties=True
