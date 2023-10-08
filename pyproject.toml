@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "dan-weather-suite"
+version = "0.1.0"
+description = ""
+authors = ["Daniel Zurawski <djzurawski@gmail.com>"]
+readme = "README.md"
+packages = [{include = "dan_weather_suite"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.11" 
+cfgrib = "^0.9.10.4"
+requests = "^2.31.0"
+numpy = "^1.25.2"
+pydantic = "^2.3.0"
+cartopy = "^0.22.0"
+pooch = "^1.7.0"
+haversine = "^2.8.0"
+types-requests = "^2.31.0.2"
+netcdf4 = "^1.6.4"
+metpy = "^1.5.1"
+ecmwflibs = "0.5.3"
+pygrib = "^2.1.4"
+climetlab = "0.17.0"
+ai-models = "0.2.3"
+ai-models-panguweather = "^0.0.2"
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.5.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
