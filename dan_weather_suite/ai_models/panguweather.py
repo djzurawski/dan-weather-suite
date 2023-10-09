@@ -64,7 +64,7 @@ def make_vort500_plots(ds, output_dir="images"):
             vort_500,
             u_500,
             v_500,
-            barb_density=40,
+            barb_density=35,
             display_counties=False,
         )
 
@@ -109,7 +109,7 @@ def make_rh700_plots(ds, output_dir="images"):
             rh_700,
             u_700,
             v_700,
-            barb_density=40,
+            barb_density=35,
             display_counties=False,
         )
 
