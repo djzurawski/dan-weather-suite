@@ -69,13 +69,13 @@ def make_vort500_plots(ds, output_dir="images"):
         )
 
         title = plot.make_title_str(
-            init_dt, valid_dt, fhour, "500mb vorticity", "pangu", "10^-5 sec", 168
+            init_dt, valid_dt, fhour, "500mb vorticity", "pangu", "10^-5 / sec", 168
         )
         ax.set_title(title)
 
         fname = f"{output_dir}/pangu.{cycle}z.conus.vort500.f{fhour_str}.png"
 
-        fig.savefig(fname)
+        fig.savefig(fname, bbox_inches="tight")
         plt.close(fig)
 
 
@@ -109,7 +109,7 @@ def make_rh700_plots(ds, output_dir="images"):
             rh_700,
             u_700,
             v_700,
-            barb_density=35,
+            barb_density=40,
             display_counties=False,
         )
 
@@ -120,7 +120,7 @@ def make_rh700_plots(ds, output_dir="images"):
 
         fname = f"{output_dir}/pangu.{cycle}z.conus.rh700.f{fhour_str}.png"
 
-        fig.savefig(fname)
+        fig.savefig(fname, bbox_inches="tight")
         plt.close(fig)
 
 
