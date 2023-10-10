@@ -540,6 +540,7 @@ def plot_700_rh(lons, lats, hgt_700, rh_700, u_700, v_700, **kwargs):
         lats,
         u_700,
         v_700,
+        **kwargs,
     )
 
     if "title" in kwargs:
