@@ -75,3 +75,6 @@ WASATCH = Region(
 )
 
 HREF_REGIONS = [FRONT_RANGE, WASATCH]
+
+
+CONUS_EXTENT = Extent(top=61, bottom=15, left=-130, right=-65)

@@ -204,11 +204,16 @@ def coriolis_parameter(lat_degrees):
     return f
 
 
-def make_title_str(init_dt, valid_dt, fhour, field_name, model_name="", field_units=""):
+def make_title_str(
+    init_dt, valid_dt, fhour, field_name, model_name="", field_units="", max_fhour=84
+):
     date_format = "%Y-%m-%dT%HZ"
     init_str = init_dt.strftime(date_format)
     valid_str = valid_dt.strftime(date_format)
-    fhour = str(fhour).zfill(2)
+    if max_fhour >= 100:
+        fhour = str(fhour).zfill(3)
+    else:
+        fhour = str(fhour).zfill(2)
 
     return f"{model_name}   Init: {init_str}    Valid: {valid_str}    {field_name} ({field_units})   Hour: {fhour}"
 
@@ -222,7 +227,7 @@ def add_title(
     return fig, ax
 
 
-def create_basemap(projection=crs.PlateCarree(), display_counties=True):
+def create_basemap(projection=crs.PlateCarree(), display_counties=True, **kwargs):
     fig, ax = plt.subplots(figsize=(18, 10), subplot_kw={"projection": projection})
     # fig = plt.figure(figsize=(18, 10))
     # ax = plt.axes(projection=projection)
@@ -314,24 +319,25 @@ def add_contourf(
 
 
 def add_wind_barbs(
-    fig,
-    ax,
-    lons,
-    lats,
-    u,
-    v,
-    barb_length=5.5,
-    # barb_interval=8,
+    fig, ax, lons, lats, u, v, barb_length=5.5, barb_density=20, **kwargs
 ):
     # step = barb_interval
-    step = int(lons.shape[0] // 20)
+    step = int(lons.shape[0] // barb_density)
 
     u = np.array(u)
     v = np.array(v)
 
+    if len(lons.shape) == 2:
+        barb_lons = lons[::step, ::step]
+        barb_lats = lats[::step, ::step]
+
+    else:
+        barb_lons = lons[::step]
+        barb_lats = lats[::step]
+
     ax.barbs(
-        lons[::step, ::step],
-        lats[::step, ::step],
+        barb_lons,
+        barb_lats,
         u[::step, ::step],
         v[::step, ::step],
         transform=crs.PlateCarree(),
@@ -453,7 +459,7 @@ def plot_temp_2m(lons, lats, temp, **kwargs):
 def plot_500_vorticity(lons, lats, hgt_500, vort_500, u_500, v_500, **kwargs):
     projection = kwargs.get("projection", crs.PlateCarree())
 
-    fig, ax = create_basemap(projection=projection)
+    fig, ax = create_basemap(projection=projection, **kwargs)
 
     hgt_500_levels = np.arange(492, 594, 3)
 
@@ -469,7 +475,7 @@ def plot_500_vorticity(lons, lats, hgt_500, vort_500, u_500, v_500, **kwargs):
         colors=VORT_COLORS,
     )
 
-    fig, ax = add_wind_barbs(fig, ax, lons, lats, u_500, v_500)
+    fig, ax = add_wind_barbs(fig, ax, lons, lats, u_500, v_500, **kwargs)
 
     if "title" in kwargs:
         ax.set_title(kwargs["title"])
@@ -479,7 +485,7 @@ def plot_500_vorticity(lons, lats, hgt_500, vort_500, u_500, v_500, **kwargs):
 
 def plot_700_rh(lons, lats, hgt_700, rh_700, u_700, v_700, **kwargs):
     projection = kwargs.get("projection", crs.PlateCarree())
-    fig, ax = create_basemap(projection=projection)
+    fig, ax = create_basemap(projection=projection, **kwargs)
 
     hgt_700_levels = np.arange(180, 420, 3)
 
@@ -534,6 +540,7 @@ def plot_700_rh(lons, lats, hgt_700, rh_700, u_700, v_700, **kwargs):
         lats,
         u_700,
         v_700,
+        **kwargs,
     )
 
     if "title" in kwargs:

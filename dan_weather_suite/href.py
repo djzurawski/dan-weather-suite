@@ -308,7 +308,7 @@ def main(output_dir: str = "images"):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Process some integers.")
+    parser = argparse.ArgumentParser()
     parser.add_argument(
         "-o", "--output-dir", help="Ouput directory for plots", default="images"
     )
