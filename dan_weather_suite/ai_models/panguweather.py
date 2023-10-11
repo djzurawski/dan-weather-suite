@@ -69,7 +69,7 @@ def make_vort500_plots(ds, output_dir="images"):
         )
 
         title = plot.make_title_str(
-            init_dt, valid_dt, fhour, "500mb vorticity", "pangu", "10^-5 / sec", 168
+            init_dt, valid_dt, fhour, "500mb vorticity", "pangu", "10^5 s^-1", 168
         )
         ax.set_title(title)
 
