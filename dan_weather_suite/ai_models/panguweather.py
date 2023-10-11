@@ -74,6 +74,7 @@ def make_vort500_plots(ds, output_dir="images"):
         ax.set_title(title)
 
         fname = f"{output_dir}/pangu.{cycle}z.conus.vort500.f{fhour_str}.png"
+        print(init_dt.isoformat(), fname)
 
         fig.savefig(fname, bbox_inches="tight")
         plt.close(fig)
@@ -119,6 +120,7 @@ def make_rh700_plots(ds, output_dir="images"):
         ax.set_title(title)
 
         fname = f"{output_dir}/pangu.{cycle}z.conus.rh700.f{fhour_str}.png"
+        print(init_dt.isoformat(), fname)
 
         fig.savefig(fname, bbox_inches="tight")
         plt.close(fig)
