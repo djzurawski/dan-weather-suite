@@ -227,7 +227,8 @@ def add_title(
     return fig, ax
 
 
-def create_basemap(projection=crs.PlateCarree(), display_counties=True, **kwargs):
+def create_basemap(display_counties=True, **kwargs):
+    projection = kwargs.get("projection", crs.PlateCarree())
     fig, ax = plt.subplots(figsize=(18, 10), subplot_kw={"projection": projection})
     # fig = plt.figure(figsize=(18, 10))
     # ax = plt.axes(projection=projection)
@@ -291,6 +292,7 @@ def add_contourf(
     else:
         cmap = None
         norm = None
+
 
     contours = ax.contourf(
         lons,
@@ -457,9 +459,7 @@ def plot_temp_2m(lons, lats, temp, **kwargs):
 
 
 def plot_500_vorticity(lons, lats, hgt_500, vort_500, u_500, v_500, **kwargs):
-    projection = kwargs.get("projection", crs.PlateCarree())
-
-    fig, ax = create_basemap(projection=projection, **kwargs)
+    fig, ax = create_basemap(**kwargs)
 
     hgt_500_levels = np.arange(492, 594, 3)
 
@@ -484,8 +484,7 @@ def plot_500_vorticity(lons, lats, hgt_500, vort_500, u_500, v_500, **kwargs):
 
 
 def plot_700_rh(lons, lats, hgt_700, rh_700, u_700, v_700, **kwargs):
-    projection = kwargs.get("projection", crs.PlateCarree())
-    fig, ax = create_basemap(projection=projection, **kwargs)
+    fig, ax = create_basemap(**kwargs)
 
     hgt_700_levels = np.arange(180, 420, 3)
 
