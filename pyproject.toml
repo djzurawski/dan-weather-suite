@@ -23,6 +23,7 @@ pygrib = "^2.1.4"
 climetlab = "0.17.0"
 ai-models = "0.2.3"
 ai-models-panguweather = "^0.0.2"
+rioxarray = "^0.15.0"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.5.1"
