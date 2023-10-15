@@ -8,17 +8,21 @@ import cartopy.crs as crs
 import numpy as np
 import argparse
 import multiprocessing as mp
+from scipy.interpolate import griddata
 
 from dateutil import parser
 from datetime import datetime, timedelta
+from scipy.spatial import distance
 
 # GRAVITY = 9.81 * (units.m / units.s**2)
 CO_NC_DIR = "/home/dan/uems/runs/colorado5km/wrfprd"
 
+
 def tst():
-    f = "/home/dan/Documents/weather/wrfprd/d01_06"
-    f = "/home/dan/Documents/wrf/wrfprd/wrfout_d01_2023-10-12_01:00:00"
-    ds = xr.open_dataset(f)
+    # f = "/home/dan/Documents/weather/wrfprd/d01_06"
+    # f = "/home/dan/Documents/wrf/wrfprd/wrfout_d01_2023-10-12_01:00:00"
+    f = "/home/dan/Documents/wrf/wrfprd/wrfout_d01_2023-10-12_06:00:00"
+    ds = xr.open_dataset(f, engine="netcdf4")
     return ds
 
 
@@ -136,6 +140,67 @@ def create_projection(ds):
     )
 
     return proj
+
+
+def downscaled_test(ds, trimmed):
+    rain = ds.RAINNC[0]
+    grid = interp_to_prism(rain, trimmed)
+    wrf_rain = grid.reshape(trimmed.band_data[0].shape)
+    wrf_downscaled = wrf_rain * trimmed
+    plot_data(
+        wrf_downscaled.x, wrf_downscaled.y, np.clip(wrf_downscaled.band_data[0], 0, 20)
+    )
+
+
+def interp_to_prism(ds, ratio):
+    xx_ratio, yy_ratio = np.meshgrid(ratio.x, ratio.y)
+    ratio_pairs = np.dstack((xx_ratio, yy_ratio)).reshape(-1, 2)
+    """
+    interp_points = np.dstack((ds.XLONG, ds.XLAT)).reshape(-1,2)
+    grid_z0 = griddata(pairs, np.array(ratio.band_data[0]).reshape(-1), interp_points, method='nearest')
+    """
+
+    interp_points = ratio_pairs
+    wrf_coords = np.dstack((ds.XLONG, ds.XLAT)).reshape(-1, 2)
+    grid = griddata(
+        wrf_coords, ds.to_numpy().reshape(-1), interp_points, method="cubic"
+    )
+
+    data_at_prism_points = grid.reshape(ratio.grid_data.shape[0])
+
+    return data_at_prism_points
+
+
+def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
+    precip = ds.RAINNC
+    lats = ds.PB.XLAT[0]
+    lons = ds.PB.XLONG[0]
+
+    projection = create_projection(ds)
+
+    init_dt = parser.parse(ds.START_DATE.replace("_", " "))
+    valid_dt = datetime64_to_datetime(ds.XTIME.values[0])
+    cycle = str(init_dt.hour).zfill(2)
+
+    fhour = int((valid_dt - init_dt).total_seconds() // 3600)
+    fhour_str = str(fhour).zfill(2)
+
+    fig, ax = plot.plot_precip(
+        lons.values, lats.values, precip, projection=projection, display_counties=False
+    )
+
+    title = plot.make_title_str(
+        init_dt,
+        valid_dt,
+        fhour,
+        "Acc precip",
+        "danwrf",
+        "(in)",
+    )
+    ax.set_title(title)
+
+    fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.vort500.f{fhour_str}.png"
+    fig.savefig(fname, bbox_inches="tight")
 
 
 def vort_500_plot(ds, domain_name, output_dir):
@@ -322,7 +387,6 @@ def vort_500_plots(wrfprd_dir, domain_name, wrf_domain="d01"):
 
 
 def rh_700_plots(wrfprd_dir, domain_name, wrf_domain):
-
     nc_paths = [
         wrfprd_dir + "/" + nc_file
         for nc_file in domain_netcdf_files(path=wrfprd_dir, wrf_domain=wrf_domain)
