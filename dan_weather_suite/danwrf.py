@@ -6,12 +6,14 @@ from dan_weather_suite.plotting import plot
 import matplotlib.pyplot as plt
 import cartopy.crs as crs
 import numpy as np
+import argparse
+import multiprocessing as mp
 
 from dateutil import parser
 from datetime import datetime, timedelta
 
 # GRAVITY = 9.81 * (units.m / units.s**2)
-
+CO_NC_DIR = "/home/dan/uems/runs/colorado5km/wrfprd"
 
 def tst():
     f = "/home/dan/Documents/weather/wrfprd/d01_06"
@@ -22,6 +24,11 @@ def tst():
 
 def datetime64_to_datetime(dt: np.datetime64) -> datetime:
     return datetime.utcfromtimestamp(int(dt) / 1e9)
+
+
+def domain_netcdf_files(wrf_domain="d02", path=CO_NC_DIR):
+    domain_files = sorted([f for f in os.listdir(path) if wrf_domain in f])
+    return domain_files
 
 
 def add_pressure(ds):
@@ -131,7 +138,7 @@ def create_projection(ds):
     return proj
 
 
-def vort_500_plot(ds, domain_name):
+def vort_500_plot(ds, domain_name, output_dir):
     levels = [500] * units.hPa
 
     ds = add_pressure(ds)
@@ -165,8 +172,10 @@ def vort_500_plot(ds, domain_name):
 
     init_dt = parser.parse(ds.START_DATE.replace("_", " "))
     valid_dt = datetime64_to_datetime(ds.XTIME.values[0])
+    cycle = str(init_dt.hour).zfill(2)
 
     fhour = int((valid_dt - init_dt).total_seconds() // 3600)
+    fhour_str = str(fhour).zfill(2)
 
     fig, ax = plot.plot_500_vorticity(
         lons.values,
@@ -189,10 +198,11 @@ def vort_500_plot(ds, domain_name):
     )
     ax.set_title(title)
 
-    plt.show()
+    fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.vort500.f{fhour_str}.png"
+    fig.savefig(fname, bbox_inches="tight")
 
 
-def rh_700_plot(ds, domain_name):
+def rh_700_plot(ds, domain_name, output_dir):
     levels = [700] * units.hPa
 
     ds = add_pressure(ds)
@@ -228,8 +238,10 @@ def rh_700_plot(ds, domain_name):
 
     init_dt = parser.parse(ds.START_DATE.replace("_", " "))
     valid_dt = datetime64_to_datetime(ds.XTIME.values[0])
+    cycle = str(init_dt.hour).zfill(2)
 
     fhour = int((valid_dt - init_dt).total_seconds() // 3600)
+    fhour_str = str(fhour).zfill(2)
 
     fig, ax = plot.plot_700_rh(
         lons.values,
@@ -251,8 +263,8 @@ def rh_700_plot(ds, domain_name):
         "%",
     )
     ax.set_title(title)
-
-    plt.show()
+    fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.rh700.f{fhour_str}.png"
+    fig.savefig(fname, bbox_inches="tight")
 
 
 def terp():
@@ -286,20 +298,87 @@ def terrain(ds):
     projection = create_projection(ds)
     fig, ax = plot.create_basemap(display_counties=True, projection=projection)
     levels = np.arange(1000, 3800, 100)
-    fig, ax = plot.add_contourf(
-        fig, ax, ds.HGT.XLONG[0], ds.HGT.XLAT[0], ds.HGT[0], levels=levels
+
+    ax.pcolormesh(
+        ds.HGT.XLONG[0],
+        ds.HGT.XLAT[0],
+        ds.HGT[0],
+        vmin=1000,
+        vmax=3800,
+        transform=crs.PlateCarree(),
     )
-    fig.show()
+
+    plt.show()
 
 
-def main():
-    f = "/home/dan/Documents/wrf/wrfprd/wrfout_d01_2023-10-12_06:00:00"
-    f = "/home/dan/Documents/wrf/wrfprd/wrfout_d02_2023-10-12_06:00:00"
-    ds = xr.open_dataset(f)
-    ds = preprocess_ds(ds)
-    # vort_500_plot(ds, "")
-    rh_700_plot(ds, "")
+def vort_500_plots(wrfprd_dir, domain_name, wrf_domain="d01"):
+    nc_paths = [
+        wrfprd_dir + "/" + nc_file
+        for nc_file in domain_netcdf_files(path=wrfprd_dir, wrf_domain=wrf_domain)
+    ]
+
+    for nc_path in nc_paths:
+        vort_500_plot(nc_path, domain_name)
+
+
+def rh_700_plots(wrfprd_dir, domain_name, wrf_domain):
+
+    nc_paths = [
+        wrfprd_dir + "/" + nc_file
+        for nc_file in domain_netcdf_files(path=wrfprd_dir, wrf_domain=wrf_domain)
+    ]
+
+    for nc_path in nc_paths:
+        rh_700_plot(nc_path, domain_name)
+
+
+def main(wrfprd_path, domain_names, wrf_domains=["d01"], labels=[]):
+    # Do it this way because mp.Pool() freezes computer when using after calling
+    # accumulated_swe_plots()
+    with mp.Pool() as pool:
+        for domain_name, wrf_domain in zip(domain_names, wrf_domains):
+            pool.apply_async(
+                accumulated_swe_plots,
+                (wrfprd_path, domain_name, wrf_domain, labels),
+                error_callback=error_callback,
+            )
+            pool.apply_async(
+                accumulated_precip_plots,
+                (wrfprd_path, domain_name, wrf_domain, labels),
+                error_callback=error_callback,
+            )
+            pool.apply_async(
+                rh_700_plots,
+                (wrfprd_path, domain_name, wrf_domain),
+                error_callback=error_callback,
+            )
+            pool.apply_async(
+                vort_500_plots,
+                (wrfprd_path, domain_name, wrf_domain),
+                error_callback=error_callback,
+            )
+
+            pool.apply_async(
+                temp_2m_plots,
+                (wrfprd_path, domain_name, wrf_domain),
+                error_callback=error_callback,
+            )
+
+        pool.close()
+        pool.join()
 
 
 if __name__ == "__main__":
-    main()
+    argparser = argparse.ArgumentParser(description="Danwrf plot generator")
+    argparser.add_argument("-p", "--wrfprd-path", type=str, required=True)
+    argparser.add_argument("-d", "--domain-name", type=str, required=True)
+    argparser.add_argument("-n", "--num-nests", type=int, default=1)
+
+    args = argparser.parse_args()
+
+    domain_name = args.domain_name
+    wrfprd_path = args.wrfprd_path
+    num_nests = args.num_nests
+
+    wrf_domains = ["d0" + str(i) for i in range(1, num_nests + 1)]
+    domain_names = [f"{domain_name}-{d}" for d in wrf_domains]
