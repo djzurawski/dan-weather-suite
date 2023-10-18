@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 import os
 
 from dan_weather_suite.plotting.regions import CONUS_EXTENT
+import traceback
 
 # GRAVITY = 9.81 * (units.m / units.s**2)
 CO_NC_DIR = "/home/dan/uems/runs/colorado5km/wrfprd"
@@ -63,22 +64,27 @@ def add_geopotential_height(ds):
     return ds
 
 
+
+
 def add_temp_c(ds):
     """Adds temperature in celsius"""
 
     # 300 adjustment from WRF manual
     theta = (ds.T + 300) * units.degK
+    temp_k = mpcalc.temperature_from_potential_temperature(ds.pressure, theta)    
+    temp_c = temp_k - 273.15 * units.degK
 
-    temp_k = mpcalc.temperature_from_potential_temperature(ds.pressure, theta)
-    temp_c = temp_k - 273.15
-    temp_c = temp_c.assign_attrs(
-        {
+    da = xr.DataArray(
+        data=temp_c.values * units.degC,
+        dims=temp_c.dims,
+        coords=temp_c.coords,
+        attrs={
             "units": "celsius",
             "description": "Temperature",
             "MemoryOrder": "XYZ",
-        }
-    )
-    ds["temp_c"] = temp_c
+        },
+    )    
+    ds["temp_c"] = da    
     return ds
 
 
@@ -174,7 +180,7 @@ def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
     fhour_str = str(fhour).zfill(2)
 
     fig, ax = plot.plot_precip(
-        lons.values, lats.values, precip, projection=projection, display_counties=True
+        lons.values, lats.values, precip, display_counties=True
     )
 
     title = plot.make_title_str(
@@ -183,14 +189,17 @@ def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
         fhour,
         "Acc precip",
         "danwrf",
-        "(in)",
+        "in",
     )
     ax.set_title(title)
-    ax.set_extent[
+    """
+    ax.set_extent([
         CONUS_EXTENT.left, CONUS_EXTENT.right, CONUS_EXTENT.bottom, CONUS_EXTENT.top
-    ]
+    ])
+    """
 
-    fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.vort500.f{fhour_str}.png"
+    fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.precip.f{fhour_str}.png"
+    print("saving", fname)
     fig.savefig(fname, bbox_inches="tight")
     plt.close(fig)
 
@@ -210,7 +219,7 @@ def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
     fhour_str = str(fhour).zfill(2)
 
     fig, ax = plot.plot_precip(
-        lons.values, lats.values, swe, projection=projection, display_counties=True
+        lons.values, lats.values, swe, display_counties=True
     )
 
     title = plot.make_title_str(
@@ -222,11 +231,13 @@ def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
         "in",
     )
     ax.set_title(title)
-    ax.set_extent[
+    """
+    ax.set_extent([
         CONUS_EXTENT.left, CONUS_EXTENT.right, CONUS_EXTENT.bottom, CONUS_EXTENT.top
-    ]
-
-    fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.vort500.f{fhour_str}.png"
+    ])
+    """
+    fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.swe.f{fhour_str}.png"
+    print("saving", fname)
     fig.savefig(fname, bbox_inches="tight")
     plt.close(fig)
 
@@ -292,6 +303,7 @@ def vort_500_plot(ds, domain_name, output_dir):
     ax.set_title(title)
 
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.vort500.f{fhour_str}.png"
+    print("saving", fname)
     fig.savefig(fname, bbox_inches="tight")
     plt.close(fig)
 
@@ -358,6 +370,7 @@ def rh_700_plot(ds, domain_name, output_dir):
     )
     ax.set_title(title)
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.rh700.f{fhour_str}.png"
+    print("saving", fname)
     fig.savefig(fname, bbox_inches="tight")
     plt.close(fig)
 
@@ -458,14 +471,21 @@ def accumulated_swe_plots(
 
 
 def error_callback(e):
+    print(traceback.format_exc())
     print(e)
 
 
 def main(wrfprd_path, domain_names, wrf_domains=["d01"]):
     # Do it this way because mp.Pool() freezes computer when using after calling
     # accumulated_swe_plots()
+
+    #rh_700_plots(wrfprd_path, "danwrf", "d01")
+    
+
     with mp.Pool() as pool:
         for domain_name, wrf_domain in zip(domain_names, wrf_domains):
+            print(domain_name, wrf_domain)
+
             pool.apply_async(
                 accumulated_swe_plots,
                 (wrfprd_path, domain_name, wrf_domain),
@@ -476,6 +496,7 @@ def main(wrfprd_path, domain_names, wrf_domains=["d01"]):
                 (wrfprd_path, domain_name, wrf_domain),
                 error_callback=error_callback,
             )
+           
             pool.apply_async(
                 rh_700_plots,
                 (wrfprd_path, domain_name, wrf_domain),
@@ -487,15 +508,17 @@ def main(wrfprd_path, domain_names, wrf_domains=["d01"]):
                 error_callback=error_callback,
             )
 
+
         pool.close()
         pool.join()
+
 
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Danwrf plot generator")
     argparser.add_argument("-p", "--wrfprd-path", type=str, required=True)
     argparser.add_argument("-d", "--domain-name", type=str, required=True)
-    argparser.add_argument("-d", "--output-dir", type=str, default="images")
+    argparser.add_argument("-o", "--output-dir", type=str, default="images")
     argparser.add_argument("-n", "--num-nests", type=int, default=1)
 
     args = argparser.parse_args()
@@ -511,4 +534,4 @@ if __name__ == "__main__":
     wrf_domains = ["d0" + str(i) for i in range(1, num_nests + 1)]
     domain_names = [f"{domain_name}-{d}" for d in wrf_domains]
 
-    main(wrfprd_path, domain_names, wrf_domains=["d01"], labels=[])
+    main(wrfprd_path, domain_names, wrf_domains=["d01"])
