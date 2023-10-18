@@ -404,7 +404,7 @@ def plot_precip(lons, lats, precip_in, **kwargs):
         v10 = kwargs["v10"]
         fig, ax = add_wind_barbs(fig, ax, lons, lats, u10, v10)
 
-    return fig
+    return fig, ax
 
 
 def plot_swe(lons, lats, swe_in, **kwargs):

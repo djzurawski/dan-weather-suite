@@ -12,18 +12,14 @@ from scipy.interpolate import griddata
 
 from dateutil import parser
 from datetime import datetime, timedelta
-from scipy.spatial import distance
+import os
+
+from dan_weather_suite.plotting.regions import CONUS_EXTENT
 
 # GRAVITY = 9.81 * (units.m / units.s**2)
 CO_NC_DIR = "/home/dan/uems/runs/colorado5km/wrfprd"
 
-
-def tst():
-    # f = "/home/dan/Documents/weather/wrfprd/d01_06"
-    # f = "/home/dan/Documents/wrf/wrfprd/wrfout_d01_2023-10-12_01:00:00"
-    f = "/home/dan/Documents/wrf/wrfprd/wrfout_d01_2023-10-12_06:00:00"
-    ds = xr.open_dataset(f, engine="netcdf4")
-    return ds
+IN_PER_MM = 0.03937008
 
 
 def datetime64_to_datetime(dt: np.datetime64) -> datetime:
@@ -143,23 +139,15 @@ def create_projection(ds):
 
 
 def downscaled_test(ds, trimmed):
-    rain = ds.RAINNC[0]
+    rain = ds.RAINNC[0] * IN_PER_MM
     grid = interp_to_prism(rain, trimmed)
     wrf_rain = grid.reshape(trimmed.band_data[0].shape)
     wrf_downscaled = wrf_rain * trimmed
-    plot_data(
-        wrf_downscaled.x, wrf_downscaled.y, np.clip(wrf_downscaled.band_data[0], 0, 20)
-    )
 
 
 def interp_to_prism(ds, ratio):
     xx_ratio, yy_ratio = np.meshgrid(ratio.x, ratio.y)
     ratio_pairs = np.dstack((xx_ratio, yy_ratio)).reshape(-1, 2)
-    """
-    interp_points = np.dstack((ds.XLONG, ds.XLAT)).reshape(-1,2)
-    grid_z0 = griddata(pairs, np.array(ratio.band_data[0]).reshape(-1), interp_points, method='nearest')
-    """
-
     interp_points = ratio_pairs
     wrf_coords = np.dstack((ds.XLONG, ds.XLAT)).reshape(-1, 2)
     grid = griddata(
@@ -172,7 +160,7 @@ def interp_to_prism(ds, ratio):
 
 
 def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
-    precip = ds.RAINNC
+    precip = ds.RAINNC[0] * IN_PER_MM
     lats = ds.PB.XLAT[0]
     lons = ds.PB.XLONG[0]
 
@@ -186,7 +174,7 @@ def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
     fhour_str = str(fhour).zfill(2)
 
     fig, ax = plot.plot_precip(
-        lons.values, lats.values, precip, projection=projection, display_counties=False
+        lons.values, lats.values, precip, projection=projection, display_counties=True
     )
 
     title = plot.make_title_str(
@@ -198,9 +186,49 @@ def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
         "(in)",
     )
     ax.set_title(title)
+    ax.set_extent[
+        CONUS_EXTENT.left, CONUS_EXTENT.right, CONUS_EXTENT.bottom, CONUS_EXTENT.top
+    ]
 
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.vort500.f{fhour_str}.png"
     fig.savefig(fname, bbox_inches="tight")
+    plt.close(fig)
+
+
+def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
+    swe = ds.SNOWNC[0] * IN_PER_MM
+    lats = ds.PB.XLAT[0]
+    lons = ds.PB.XLONG[0]
+
+    projection = create_projection(ds)
+
+    init_dt = parser.parse(ds.START_DATE.replace("_", " "))
+    valid_dt = datetime64_to_datetime(ds.XTIME.values[0])
+    cycle = str(init_dt.hour).zfill(2)
+
+    fhour = int((valid_dt - init_dt).total_seconds() // 3600)
+    fhour_str = str(fhour).zfill(2)
+
+    fig, ax = plot.plot_precip(
+        lons.values, lats.values, swe, projection=projection, display_counties=True
+    )
+
+    title = plot.make_title_str(
+        init_dt,
+        valid_dt,
+        fhour,
+        "Acc swe",
+        "danwrf",
+        "in",
+    )
+    ax.set_title(title)
+    ax.set_extent[
+        CONUS_EXTENT.left, CONUS_EXTENT.right, CONUS_EXTENT.bottom, CONUS_EXTENT.top
+    ]
+
+    fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.vort500.f{fhour_str}.png"
+    fig.savefig(fname, bbox_inches="tight")
+    plt.close(fig)
 
 
 def vort_500_plot(ds, domain_name, output_dir):
@@ -259,12 +287,13 @@ def vort_500_plot(ds, domain_name, output_dir):
         fhour,
         "500mb vorticity",
         "danwrf",
-        " (10^5 s^-1)",
+        "10^5 s^-1",
     )
     ax.set_title(title)
 
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.vort500.f{fhour_str}.png"
     fig.savefig(fname, bbox_inches="tight")
+    plt.close(fig)
 
 
 def rh_700_plot(ds, domain_name, output_dir):
@@ -330,6 +359,7 @@ def rh_700_plot(ds, domain_name, output_dir):
     ax.set_title(title)
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.rh700.f{fhour_str}.png"
     fig.savefig(fname, bbox_inches="tight")
+    plt.close(fig)
 
 
 def terp():
@@ -362,7 +392,6 @@ def terp():
 def terrain(ds):
     projection = create_projection(ds)
     fig, ax = plot.create_basemap(display_counties=True, projection=projection)
-    levels = np.arange(1000, 3800, 100)
 
     ax.pcolormesh(
         ds.HGT.XLONG[0],
@@ -376,39 +405,75 @@ def terrain(ds):
     plt.show()
 
 
-def vort_500_plots(wrfprd_dir, domain_name, wrf_domain="d01"):
+def vort_500_plots(wrfprd_dir, domain_name, wrf_domain="d01", ouput_dir="images"):
     nc_paths = [
         wrfprd_dir + "/" + nc_file
         for nc_file in domain_netcdf_files(path=wrfprd_dir, wrf_domain=wrf_domain)
     ]
 
     for nc_path in nc_paths:
-        vort_500_plot(nc_path, domain_name)
+        ds = xr.open_dataset(nc_path, engine="netcdf4")
+        ds = preprocess_ds(ds)
+        vort_500_plot(ds, domain_name, output_dir)
 
 
-def rh_700_plots(wrfprd_dir, domain_name, wrf_domain):
+def rh_700_plots(wrfprd_dir, domain_name, wrf_domain="d01", ouput_dir="images"):
     nc_paths = [
         wrfprd_dir + "/" + nc_file
         for nc_file in domain_netcdf_files(path=wrfprd_dir, wrf_domain=wrf_domain)
     ]
 
     for nc_path in nc_paths:
-        rh_700_plot(nc_path, domain_name)
+        ds = xr.open_dataset(nc_path, engine="netcdf4")
+        ds = preprocess_ds(ds)
+        rh_700_plot(ds, domain_name, output_dir)
 
 
-def main(wrfprd_path, domain_names, wrf_domains=["d01"], labels=[]):
+def accumulated_precip_plots(
+    wrfprd_dir, domain_name, wrf_domain="d01", ouput_dir="images"
+):
+    nc_paths = [
+        wrfprd_dir + "/" + nc_file
+        for nc_file in domain_netcdf_files(path=wrfprd_dir, wrf_domain=wrf_domain)
+    ]
+
+    for nc_path in nc_paths:
+        ds = xr.open_dataset(nc_path, engine="netcdf4")
+        ds = preprocess_ds(ds)
+        accumulated_precip_plot(ds, domain_name, output_dir)
+
+
+def accumulated_swe_plots(
+    wrfprd_dir, domain_name, wrf_domain="d01", ouput_dir="images"
+):
+    nc_paths = [
+        wrfprd_dir + "/" + nc_file
+        for nc_file in domain_netcdf_files(path=wrfprd_dir, wrf_domain=wrf_domain)
+    ]
+
+    for nc_path in nc_paths:
+        ds = xr.open_dataset(nc_path, engine="netcdf4")
+        ds = preprocess_ds(ds)
+        accumulated_swe_plot(ds, domain_name, output_dir)
+
+
+def error_callback(e):
+    print(e)
+
+
+def main(wrfprd_path, domain_names, wrf_domains=["d01"]):
     # Do it this way because mp.Pool() freezes computer when using after calling
     # accumulated_swe_plots()
     with mp.Pool() as pool:
         for domain_name, wrf_domain in zip(domain_names, wrf_domains):
             pool.apply_async(
                 accumulated_swe_plots,
-                (wrfprd_path, domain_name, wrf_domain, labels),
+                (wrfprd_path, domain_name, wrf_domain),
                 error_callback=error_callback,
             )
             pool.apply_async(
                 accumulated_precip_plots,
-                (wrfprd_path, domain_name, wrf_domain, labels),
+                (wrfprd_path, domain_name, wrf_domain),
                 error_callback=error_callback,
             )
             pool.apply_async(
@@ -422,12 +487,6 @@ def main(wrfprd_path, domain_names, wrf_domains=["d01"], labels=[]):
                 error_callback=error_callback,
             )
 
-            pool.apply_async(
-                temp_2m_plots,
-                (wrfprd_path, domain_name, wrf_domain),
-                error_callback=error_callback,
-            )
-
         pool.close()
         pool.join()
 
@@ -436,6 +495,7 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Danwrf plot generator")
     argparser.add_argument("-p", "--wrfprd-path", type=str, required=True)
     argparser.add_argument("-d", "--domain-name", type=str, required=True)
+    argparser.add_argument("-d", "--output-dir", type=str, default="images")
     argparser.add_argument("-n", "--num-nests", type=int, default=1)
 
     args = argparser.parse_args()
@@ -443,6 +503,12 @@ if __name__ == "__main__":
     domain_name = args.domain_name
     wrfprd_path = args.wrfprd_path
     num_nests = args.num_nests
+    output_dir = args.output_dir
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
     wrf_domains = ["d0" + str(i) for i in range(1, num_nests + 1)]
     domain_names = [f"{domain_name}-{d}" for d in wrf_domains]
+
+    main(wrfprd_path, domain_names, wrf_domains=["d01"], labels=[])
