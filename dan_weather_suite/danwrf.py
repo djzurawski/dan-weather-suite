@@ -14,7 +14,7 @@ from dateutil import parser
 from datetime import datetime, timedelta
 import os
 
-from dan_weather_suite.plotting.regions import CONUS_EXTENT
+from dan_weather_suite.plotting.regions import WEST_CONUS_EXTENT
 import traceback
 
 # GRAVITY = 9.81 * (units.m / units.s**2)
@@ -192,11 +192,11 @@ def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
         "in",
     )
     ax.set_title(title)
-    """
+
     ax.set_extent([
-        CONUS_EXTENT.left, CONUS_EXTENT.right, CONUS_EXTENT.bottom, CONUS_EXTENT.top
+        WEST_CONUS_EXTENT.left, WEST_CONUS_EXTENT.right, WEST_CONUS_EXTENT.bottom, WEST_CONUS_EXTENT.top
     ])
-    """
+
 
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.precip.f{fhour_str}.png"
     print("saving", fname)
@@ -231,11 +231,10 @@ def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
         "in",
     )
     ax.set_title(title)
-    """
     ax.set_extent([
-        CONUS_EXTENT.left, CONUS_EXTENT.right, CONUS_EXTENT.bottom, CONUS_EXTENT.top
+        WEST_CONUS_EXTENT.left, WEST_CONUS_EXTENT.right, WEST_CONUS_EXTENT.bottom, WEST_CONUS_EXTENT.top
     ])
-    """
+
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.swe.f{fhour_str}.png"
     print("saving", fname)
     fig.savefig(fname, bbox_inches="tight")
