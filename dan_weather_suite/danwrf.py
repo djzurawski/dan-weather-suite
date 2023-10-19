@@ -193,10 +193,11 @@ def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
     )
     ax.set_title(title)
 
+    """
     ax.set_extent([
         WEST_CONUS_EXTENT.left, WEST_CONUS_EXTENT.right, WEST_CONUS_EXTENT.bottom, WEST_CONUS_EXTENT.top
     ])
-
+    """
 
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.precip.f{fhour_str}.png"
     print("saving", fname)
@@ -231,9 +232,11 @@ def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
         "in",
     )
     ax.set_title(title)
+    """
     ax.set_extent([
         WEST_CONUS_EXTENT.left, WEST_CONUS_EXTENT.right, WEST_CONUS_EXTENT.bottom, WEST_CONUS_EXTENT.top
     ])
+    """
 
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.swe.f{fhour_str}.png"
     print("saving", fname)
@@ -478,9 +481,6 @@ def main(wrfprd_path, domain_names, wrf_domains=["d01"]):
     # Do it this way because mp.Pool() freezes computer when using after calling
     # accumulated_swe_plots()
 
-    #rh_700_plots(wrfprd_path, "danwrf", "d01")
-    
-
     with mp.Pool() as pool:
         for domain_name, wrf_domain in zip(domain_names, wrf_domains):
             print(domain_name, wrf_domain)
@@ -512,7 +512,6 @@ def main(wrfprd_path, domain_names, wrf_domains=["d01"]):
         pool.join()
 
 
-
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(description="Danwrf plot generator")
     argparser.add_argument("-p", "--wrfprd-path", type=str, required=True)
@@ -533,4 +532,4 @@ if __name__ == "__main__":
     wrf_domains = ["d0" + str(i) for i in range(1, num_nests + 1)]
     domain_names = [f"{domain_name}-{d}" for d in wrf_domains]
 
-    main(wrfprd_path, domain_names, wrf_domains=["d01"])
+    main(wrfprd_path, domain_names, wrf_domains=wrf_domains)
