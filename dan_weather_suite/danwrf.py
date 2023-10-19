@@ -11,7 +11,7 @@ import multiprocessing as mp
 from scipy.interpolate import griddata
 
 from dateutil import parser
-from datetime import datetime, timedelta
+from datetime import datetime
 import os
 
 from dan_weather_suite.plotting.regions import WEST_CONUS_EXTENT
@@ -64,14 +64,12 @@ def add_geopotential_height(ds):
     return ds
 
 
-
-
 def add_temp_c(ds):
     """Adds temperature in celsius"""
 
     # 300 adjustment from WRF manual
     theta = (ds.T + 300) * units.degK
-    temp_k = mpcalc.temperature_from_potential_temperature(ds.pressure, theta)    
+    temp_k = mpcalc.temperature_from_potential_temperature(ds.pressure, theta)
     temp_c = temp_k - 273.15 * units.degK
 
     da = xr.DataArray(
@@ -83,8 +81,8 @@ def add_temp_c(ds):
             "description": "Temperature",
             "MemoryOrder": "XYZ",
         },
-    )    
-    ds["temp_c"] = da    
+    )
+    ds["temp_c"] = da
     return ds
 
 
@@ -170,8 +168,6 @@ def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
     lats = ds.PB.XLAT[0]
     lons = ds.PB.XLONG[0]
 
-    projection = create_projection(ds)
-
     init_dt = parser.parse(ds.START_DATE.replace("_", " "))
     valid_dt = datetime64_to_datetime(ds.XTIME.values[0])
     cycle = str(init_dt.hour).zfill(2)
@@ -179,9 +175,7 @@ def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
     fhour = int((valid_dt - init_dt).total_seconds() // 3600)
     fhour_str = str(fhour).zfill(2)
 
-    fig, ax = plot.plot_precip(
-        lons.values, lats.values, precip, display_counties=True
-    )
+    fig, ax = plot.plot_precip(lons.values, lats.values, precip, display_counties=True)
 
     title = plot.make_title_str(
         init_dt,
@@ -210,8 +204,6 @@ def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
     lats = ds.PB.XLAT[0]
     lons = ds.PB.XLONG[0]
 
-    projection = create_projection(ds)
-
     init_dt = parser.parse(ds.START_DATE.replace("_", " "))
     valid_dt = datetime64_to_datetime(ds.XTIME.values[0])
     cycle = str(init_dt.hour).zfill(2)
@@ -219,9 +211,7 @@ def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
     fhour = int((valid_dt - init_dt).total_seconds() // 3600)
     fhour_str = str(fhour).zfill(2)
 
-    fig, ax = plot.plot_precip(
-        lons.values, lats.values, swe, display_counties=True
-    )
+    fig, ax = plot.plot_precip(lons.values, lats.values, swe, display_counties=True)
 
     title = plot.make_title_str(
         init_dt,
@@ -232,6 +222,7 @@ def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
         "in",
     )
     ax.set_title(title)
+
     """
     ax.set_extent([
         WEST_CONUS_EXTENT.left, WEST_CONUS_EXTENT.right, WEST_CONUS_EXTENT.bottom, WEST_CONUS_EXTENT.top
@@ -495,7 +486,7 @@ def main(wrfprd_path, domain_names, wrf_domains=["d01"]):
                 (wrfprd_path, domain_name, wrf_domain),
                 error_callback=error_callback,
             )
-           
+
             pool.apply_async(
                 rh_700_plots,
                 (wrfprd_path, domain_name, wrf_domain),
@@ -506,7 +497,6 @@ def main(wrfprd_path, domain_names, wrf_domains=["d01"]):
                 (wrfprd_path, domain_name, wrf_domain),
                 error_callback=error_callback,
             )
-
 
         pool.close()
         pool.join()
