@@ -147,6 +147,7 @@ def downscaled_test(ds, trimmed):
     grid = interp_to_prism(rain, trimmed)
     wrf_rain = grid.reshape(trimmed.band_data[0].shape)
     wrf_downscaled = wrf_rain * trimmed
+    return wrf_downscaled
 
 
 def interp_to_prism(ds, ratio):
@@ -187,11 +188,15 @@ def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
     )
     ax.set_title(title)
 
-    """
-    ax.set_extent([
-        WEST_CONUS_EXTENT.left, WEST_CONUS_EXTENT.right, WEST_CONUS_EXTENT.bottom, WEST_CONUS_EXTENT.top
-    ])
-    """
+    if "d01" in domain_name:
+        ax.set_extent(
+            [
+                WEST_CONUS_EXTENT.left,
+                WEST_CONUS_EXTENT.right,
+                WEST_CONUS_EXTENT.bottom,
+                WEST_CONUS_EXTENT.top,
+            ]
+        )
 
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.precip.f{fhour_str}.png"
     print("saving", fname)
@@ -223,11 +228,15 @@ def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
     )
     ax.set_title(title)
 
-    """
-    ax.set_extent([
-        WEST_CONUS_EXTENT.left, WEST_CONUS_EXTENT.right, WEST_CONUS_EXTENT.bottom, WEST_CONUS_EXTENT.top
-    ])
-    """
+    if "d01" in domain_name:
+        ax.set_extent(
+            [
+                WEST_CONUS_EXTENT.left,
+                WEST_CONUS_EXTENT.right,
+                WEST_CONUS_EXTENT.bottom,
+                WEST_CONUS_EXTENT.top,
+            ]
+        )
 
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.swe.f{fhour_str}.png"
     print("saving", fname)
