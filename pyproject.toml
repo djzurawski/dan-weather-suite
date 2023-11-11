@@ -24,6 +24,7 @@ climetlab = "0.17.0"
 ai-models = "0.2.3"
 ai-models-panguweather = "^0.0.2"
 rioxarray = "^0.15.0"
+graphcast = {git = "https://github.com/google-deepmind/graphcast"}
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.5.1"
