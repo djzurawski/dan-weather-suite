@@ -10,10 +10,12 @@ def set_init_dt(utc_dt: datetime):
         utc_dt = utc_dt.replace(hour=0)
     elif utc_hour >= 10 and utc_hour < 16:
         utc_dt = utc_dt.replace(hour=6)
-    elif utc_hour >= 16 and utc_hour < 20:
+    elif utc_hour >= 16 and utc_hour < 22:
         utc_dt = utc_dt.replace(hour=12)
     else:
         utc_dt = utc_dt.replace(hour=18)
+
+    if utc_hour < 4:
         utc_dt = utc_dt - timedelta(days=1)
 
     return utc_dt
@@ -26,6 +28,8 @@ def load_gfs(init_dt: datetime):
     hour = str(init_dt.hour).zfill(2)
 
     date = year + month + day
+
+    print("gfs date", date)
 
     data = cml.load_source(
         "url-pattern",
