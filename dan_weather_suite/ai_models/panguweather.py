@@ -26,7 +26,7 @@ def datetime64_to_datetime(dt: np.datetime64) -> datetime:
 
 
 def load_grib(fpath: str, extent=None):
-    ds = xr.open_dataset("panguweather.grib")
+    ds = xr.open_dataset(fpath)
     ds = ds.metpy.parse_cf()
     ds["longitude"] = ((ds["longitude"] + 180) % 360) - 180
     if extent:
@@ -66,6 +66,8 @@ def make_vort500_plots(ds, output_dir="images"):
             v_500,
             barb_density=35,
             display_counties=False,
+
+
         )
 
         title = plot.make_title_str(
@@ -150,6 +152,6 @@ if __name__ == "__main__":
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    ds = load_grib("panguweather.grib", CONUS_EXTENT)
+    ds = load_grib("panguweather.grib", PANGU_NA_EXTENT)
     make_vort500_plots(ds, output_dir=output_dir)
     make_rh700_plots(ds, output_dir=output_dir)

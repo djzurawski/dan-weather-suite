@@ -80,3 +80,5 @@ HREF_REGIONS = [FRONT_RANGE, WASATCH]
 CONUS_EXTENT = Extent(top=61, bottom=15, left=-130, right=-65)
 
 WEST_CONUS_EXTENT = Extent(left=-130, right=-95, bottom=25, top=55)
+
+PANGU_NA_EXTENT = Extent(top=72, bottom=15, left=-180, right=-40)
