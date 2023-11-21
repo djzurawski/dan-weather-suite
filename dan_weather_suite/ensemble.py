@@ -79,9 +79,6 @@ class EnsembleLoader(ABC):
     def __init__(self):
         self.step_size = 6
         self.forecast_length = 240
-        self.forecast_hours = list(
-            range(0, self.forecast_length + self.step_size, self.step_size)
-        )
 
     @abstractmethod
     def get_latest_init(self) -> datetime:
@@ -167,6 +164,9 @@ class EnsembleLoader(ABC):
 class GepsLoader(EnsembleLoader):
     def __init__(self):
         super().__init__()
+        self.forecast_hours = list(
+            range(6, self.forecast_length + self.step_size, self.step_size)
+        )
         self.grib_file = "grib/geps.grib"
         self.netcdf_file = "grib/geps.nc"
 
@@ -230,6 +230,9 @@ class GepsLoader(EnsembleLoader):
 class EpsLoader(EnsembleLoader):
     def __init__(self):
         super().__init__()
+        self.forecast_hours = list(
+            range(0, self.forecast_length + self.step_size, self.step_size)
+        )
         self.client = Client(source="ecmwf")
         self.grib_file = "grib/eps.grib"
         self.netcdf_file = "grib/eps.nc"
@@ -261,7 +264,7 @@ class EpsLoader(EnsembleLoader):
     def download_grib(self, cycle=None):
         latest_init = self.get_latest_init()
         cycle = cycle or latest_init.hour
-        logger.info("EPS downloading", latest_init)
+        logger.info(f"EPS downloading {latest_init}")
         self.client.retrieve(
             time=cycle,
             stream="enfo",
@@ -274,6 +277,9 @@ class EpsLoader(EnsembleLoader):
 class GefsLoader(EnsembleLoader):
     def __init__(self):
         super().__init__()
+        self.forecast_hours = list(
+            range(6, self.forecast_length + self.step_size, self.step_size)
+        )
         self.grib_file = "grib/gefs.grib"
         self.netcdf_file = "grib/gefs.nc"
 
