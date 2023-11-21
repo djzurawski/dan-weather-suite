@@ -39,15 +39,12 @@ def set_ds_extent(ds, left, right, top, bottom):
     return trimmed
 
 
-def download_bytes(url: str, params: dict = {}, from_noaa: bool = False) -> bytes:
+def download_bytes(url: str, params: dict = {}) -> bytes:
     try:
         print("downloading", url, params)
         resp = requests.get(url, params=params)
         if resp.status_code == 200:
-            # sleep for NOAA stingy rate limits
             result = resp.content
-            if from_noaa:
-                ttime.sleep(0.25)
             return result
         else:
             error_str = (
@@ -60,7 +57,7 @@ def download_bytes(url: str, params: dict = {}, from_noaa: bool = False) -> byte
         return None
 
 
-def download_and_combine_gribs(urls: list[Tuple[str, dict]], threads=4) -> bytes:
+def download_and_combine_gribs(urls: list[Tuple[str, dict]], threads=1) -> bytes:
     with ThreadPoolExecutor(threads) as executor:
         results = list(executor.map(lambda x: download_bytes(*x), urls))
         concatenated_bytes = b"".join(
@@ -70,8 +67,16 @@ def download_and_combine_gribs(urls: list[Tuple[str, dict]], threads=4) -> bytes
 
 
 def download_and_combine_gribs_from_noaa(urls: list[Tuple[str, dict]]) -> bytes:
+    grib_bytes = []
+    for url, param in urls:
+        grib_bytes.append(download_bytes(url, param))
+        ttime.sleep(0.25)
+
+    concatenated_bytes = b"".join(result for result in grib_bytes if result is not None)
+    """
     results = [download_bytes(url, params) for url, params in urls]
     concatenated_bytes = b"".join(result for result in results if result is not None)
+    """
     return concatenated_bytes
 
 
@@ -99,10 +104,14 @@ class EnsembleLoader(ABC):
         forecast_init = isoparse(str(ds.time.values))
         latest_init = self.get_latest_init()
         if cycle is not None:
-            latest_init = latest_init.replace(hour=0)
+            latest_init = latest_init.replace(hour=cycle)
         return forecast_init == latest_init
 
-    def download_forecast(self, cycle=None):
+    def download_forecast(self, cycle=None, force=False):
+        if force:
+            os.remove(self.grib_file)
+            os.remove(self.netcdf_file)
+
         if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
             print("Downloading grib")
             self.download_grib(cycle)
@@ -115,8 +124,17 @@ class EnsembleLoader(ABC):
             top = extent.top
             bottom = extent.bottom
             ds = set_ds_extent(ds, left, right, top, bottom)
-            print("Saving to NETCDF")
-            ds.to_netcdf(self.netcdf_file)
+            retries = 0
+            while retries <= 3:
+                try:
+                    print("Saving to NETCDF")
+                    ds.to_netcdf(self.netcdf_file, mode="a")
+                    break
+                except Exception as e:
+                    print(f"Error saving NETCDF {self.netcdf_file}: {e}")
+                    ttime.sleep(3)
+                    retries += 1
+
         print("Up to date")
         return True
 
@@ -181,7 +199,7 @@ class GepsLoader(EnsembleLoader):
     def download_grib(self, cycle=None):
         init_dt = self.get_latest_init()
         if cycle is not None:
-            init_dt = init_dt.replace(hour=0)
+            init_dt = init_dt.replace(hour=cycle)
 
         urls = [self.url_formatter(init_dt, fhour) for fhour in self.forecast_hours]
 
@@ -239,10 +257,13 @@ class EpsLoader(EnsembleLoader):
 
         return latest
 
-    def is_current(self) -> bool:
+    def is_current(self, cycle=None) -> bool:
         latest = self.get_latest_init()
         ds = self.open_dataset()
         current = isoparse(str(ds.time.values))
+
+        if cycle is not None:
+            latest = latest.replace(hour=cycle)
 
         return latest == current
 
@@ -288,20 +309,26 @@ class GefsLoader(EnsembleLoader):
     def download_grib(self, cycle=None):
         init_dt = self.get_latest_init()
         if cycle is not None:
-            init_dt = init_dt.replace(hour=0)
+            init_dt = init_dt.replace(hour=cycle)
         control_member = ["c00"]
         perturbed_members = [f"p{str(i).zfill(2)}" for i in range(1, 31)]
         members = control_member + perturbed_members
 
-        urls = []
-
+        # urls = []
+        # Need to download serially...slowly because of NOAA grib server request limits
+        grib_bytes = []
         for fhour in self.forecast_hours:
             for member in members:
-                urls.append(self.url_formatter(init_dt, fhour, member))
+                url, params = self.url_formatter(init_dt, fhour, member)
+                # urls.append(self.url_formatter(init_dt, fhour, member))
+                grib_bytes.append(download_bytes(url, params))
+                ttime.sleep(0.2)
 
-        grib_bytes = download_and_combine_gribs_from_noaa(urls)
+        concatenated_bytes = b"".join(
+            result for result in grib_bytes if result is not None
+        )
         with open(self.grib_file, "wb") as f:
-            f.write(grib_bytes)
+            f.write(concatenated_bytes)
 
     def url_formatter(
         self, init_dt: datetime, fhour: int, member: str
@@ -392,6 +419,7 @@ class Ensemble:
 
         if downscale:
             ratio = self.downscale_ds.interp(latitude=lat, longitude=lon).band_data
+            print(f"Ratio {ratio.values} at {lat},{lon}")
             precip = ratio * precip * conversion
 
         plumes = []
@@ -410,6 +438,7 @@ class Ensemble:
         downscale=True,
         member: int | None = None,
         percentile: float | None = None,
+        ratio: bool = True,
     ) -> Tuple[NDArray[float], NDArray[float], xr.DataArray]:
         step_size = self.loader.step_size
         assert fhour % step_size == 0, "forecast hour must be divisible by 6"
@@ -438,31 +467,70 @@ class Ensemble:
                 method="linear",
             )
 
+            if ratio:
+                precip_points = self.downscale_ds.band_data * precip_points
+
             return (
                 precip_points.longitude.values,
                 precip_points.latitude.values,
-                self.downscale_ds.band_data * precip_points,
+                precip_points,
             )
 
 
+def download_loader_forecast(loader: EnsembleLoader, cycle=None, force=False):
+    return loader().download_forecast(cycle)
+
+
+def download_all_forecasts(cycle=None, force=False):
+    with ProcessPoolExecutor() as executor:
+        gefs = executor.submit(download_loader_forecast, GefsLoader, cycle, force)
+        geps = executor.submit(download_loader_forecast, GepsLoader, cycle, force=force)
+        eps = executor.submit(download_loader_forecast, EpsLoader, cycle, force=force)
+
+        futures = [gefs, geps, eps]
+        return [f.result() for f in futures]
+
+
+def plot_compare(ens: Ensemble):
+    lon, lat, swe = ens.swe_at_fhour(84, downscale=True, ratio=True)
+    plot.plot_swe(lon, lat, swe, pcolormesh=True)
+    plt.title("Downscaled")
+
+    lon, lat, swe = ens.swe_at_fhour(84, downscale=True, ratio=False)
+    plot.plot_swe(lon, lat, swe, pcolormesh=True)
+    plt.title("Interpolated")
+
+    lon, lat, swe = ens.swe_at_fhour(84, downscale=False, ratio=False)
+    plot.plot_swe(lon, lat, swe, pcolormesh=True)
+    plt.title("Native")
+    # plt.show()
+
+
+def xtick_formatter(t):
+    None
+
+
 def plume_plot(lon, lat, title="", return_bytes: bool = False):
-    eps = Ensemble(EpsLoader(), "EPS", "green")
+    eps = Ensemble(EpsLoader(), "ECMWF ENS", "green")
     gefs = Ensemble(GefsLoader(), "GEFS", "red")
-    geps = Ensemble(GepsLoader(), "GEPS", "blue")
+    geps = Ensemble(GepsLoader(), "CMCE", "blue")
 
     ensembles = [geps, gefs, eps]
 
-    plt.figure()
+    fig, axs = plt.subplots(1, 2, figsize=(16, 5), sharey=True)
+    plt.tight_layout(pad=2)
+
     all_plumes = []
     for ensemble in ensembles:
         times, plumes = ensemble.point_plumes(lon, lat)
         for plume in plumes:
-            plt.plot(times, plume, color=ensemble.plume_color, alpha=0.3, linewidth=1)
+            axs[0].plot(
+                times, plume, color=ensemble.plume_color, alpha=0.3, linewidth=1
+            )
             all_plumes.append(plume)
 
         mean = np.mean(plumes, axis=0)
-        print(ensemble.name)
-        plt.plot(
+        axs[0].plot(
             times,
             mean,
             color=ensemble.plume_color,
@@ -470,25 +538,25 @@ def plume_plot(lon, lat, title="", return_bytes: bool = False):
             zorder=200,
             label=ensemble.name,
         )
-        plt.legend()
-        plt.title(f"{title} precipitation (in) lat: {lat} lon: {lon}")
 
-    """
-    boxplot_data = list(np.array(all_plumes).T)
-    plt.figure()
-    plt.boxplot(
-        boxplot_data,
-    )
-    plt.figure()
-    plt.violinplot(
+    axs[0].legend()
+    fig.suptitle(f"{title} precipitation (in) lat: {lat} lon: {lon}")
+
+    # vertical line at day 7
+    day_7 = int(168 / 6)
+    axs[0].axvline(times[day_7], color="gray", linestyle="--")
+    axs[1].axvline(day_7, color="gray", linestyle="--")
+
+    boxplot_data = np.array(all_plumes)
+    axs[1].boxplot(boxplot_data, showfliers=False, whis=(10, 90), widths=0.25)
+    axs[1].violinplot(
         boxplot_data,
         showmeans=True,
         showmedians=True,
         showextrema=False,
-        widths=[0.8 for i in boxplot_data],
-        quantiles=[[0.1, 0.9] for i in boxplot_data],
+        widths=0.8,
     )
-    """
+
     if return_bytes:
         with io.BytesIO() as bio:
             plt.savefig(bio, format="jpg", bbox_inches="tight")
