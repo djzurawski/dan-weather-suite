@@ -8,6 +8,7 @@ from datetime import datetime, time, timedelta
 from dateutil.parser import isoparse
 from ecmwf.opendata import Client
 import io
+import logging
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
@@ -18,21 +19,24 @@ from typing import Tuple
 import xarray as xr
 
 
-IN_PER_M = 39.37
-IN_PER_MM = 1 / 25.4
-WATER_DENSITY = 1000  # kg/m3
-
 dask.config.set({"array.slicing.split_large_chunks": True})
+
+logging.basicConfig(level=logging.INFO)
 
 
 def round_to_nearest(x: float, options: Iterable[float] = [0.25, 0.4, 0.5]) -> float:
     "Rounds x to the nearest value in 'options'"
+    assert options, "options cannot be empty"
+
     closest = min(options, key=lambda opt: abs(opt - x))
     return closest
 
 
-def set_ds_extent(ds, left, right, top, bottom):
-    # left, right, bottom, top = extent
+def set_ds_extent(ds, extent: regions.Extent):
+    left = extent.left
+    right = extent.right
+    top = extent.top
+    bottom = extent.bottom
     x_condition = (ds.longitude >= left) & (ds.longitude <= right)
     y_condition = (ds.latitude >= bottom) & (ds.latitude <= top)
     trimmed = ds.where(x_condition & y_condition, drop=True)
@@ -41,19 +45,19 @@ def set_ds_extent(ds, left, right, top, bottom):
 
 def download_bytes(url: str, params: dict = {}) -> bytes:
     try:
-        print("downloading", url, params)
-        resp = requests.get(url, params=params)
+        logging.info(f"downloading {url} {params}")
+        resp = requests.get(url, params=params, timeout=600)
         if resp.status_code == 200:
             result = resp.content
             return result
         else:
-            error_str = (
+            error_str = logging.error(
                 f"Error downloading {url} status:{resp.status_code}, {resp.text}"
             )
             raise requests.exceptions.RequestException(error_str)
 
     except requests.exceptions.RequestException as e:
-        print(e)
+        logging.error(f"Error downloading {url} status:{resp.status_code}, {e}")
         return None
 
 
@@ -64,20 +68,6 @@ def download_and_combine_gribs(urls: list[Tuple[str, dict]], threads=1) -> bytes
             result for result in results if result is not None
         )
         return concatenated_bytes
-
-
-def download_and_combine_gribs_from_noaa(urls: list[Tuple[str, dict]]) -> bytes:
-    grib_bytes = []
-    for url, param in urls:
-        grib_bytes.append(download_bytes(url, param))
-        ttime.sleep(0.25)
-
-    concatenated_bytes = b"".join(result for result in grib_bytes if result is not None)
-    """
-    results = [download_bytes(url, params) for url, params in urls]
-    concatenated_bytes = b"".join(result for result in results if result is not None)
-    """
-    return concatenated_bytes
 
 
 class EnsembleLoader(ABC):
@@ -108,34 +98,34 @@ class EnsembleLoader(ABC):
         return forecast_init == latest_init
 
     def download_forecast(self, cycle=None, force=False):
+        print("download forecast")
+        logging.info("Downloading grib")
         if force:
-            os.remove(self.grib_file)
-            os.remove(self.netcdf_file)
+            if os.path.exists(self.netcdf_file):
+                os.remove(self.netcdf_file)
+            if os.path.exists(self.grib_file):
+                os.remove(self.grib_file)
 
         if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
-            print("Downloading grib")
+            logging.info("Downloading grib")
             self.download_grib(cycle)
             print("Processed grib")
             ds = self.process_grib()
-            print("Setting CONUS extent")
+            logging.info("Setting CONUS extent")
             extent = regions.PRISM_EXTENT
-            left = extent.left
-            right = extent.right
-            top = extent.top
-            bottom = extent.bottom
-            ds = set_ds_extent(ds, left, right, top, bottom)
+            ds = set_ds_extent(ds, extent)
             retries = 0
             while retries <= 3:
                 try:
-                    print("Saving to NETCDF")
+                    logging.info("Saving to NETCDF")
                     ds.to_netcdf(self.netcdf_file, mode="a")
                     break
                 except Exception as e:
-                    print(f"Error saving NETCDF {self.netcdf_file}: {e}")
+                    logging.error(f"Error saving NETCDF {self.netcdf_file}: {e}")
                     ttime.sleep(3)
                     retries += 1
 
-        print("Up to date")
+        logging.info("Up to date")
         return True
 
     @abstractmethod
@@ -150,8 +140,7 @@ class EnsembleLoader(ABC):
         Loads downloaded grib on disk.
         Combines control and perturbed members into one xr.Dataset
         """
-        # chunks = {'step': 40, 'number': 1, 'latitude': 100, 'longitude': 100}
-        # chunks = {'step': 'auto', 'number': 'auto', 'latitude': 128, 'longitude': 128}
+
         ds_c = xr.open_dataset(
             self.grib_file, filter_by_keys={"dataType": "cf"}, chunks={}
         )
@@ -173,9 +162,6 @@ class EnsembleLoader(ABC):
 class GepsLoader(EnsembleLoader):
     def __init__(self):
         super().__init__()
-        self.forecast_hours = list(
-            range(6, self.forecast_length + self.step_size, self.step_size)
-        )
         self.grib_file = "grib/geps.grib"
         self.netcdf_file = "grib/geps.nc"
 
@@ -270,7 +256,7 @@ class EpsLoader(EnsembleLoader):
     def download_grib(self, cycle=None):
         latest_init = self.get_latest_init()
         cycle = cycle or latest_init.hour
-        print("EPS downloading", latest_init)
+        logging.info("EPS downloading", latest_init)
         self.client.retrieve(
             time=cycle,
             stream="enfo",
@@ -283,9 +269,6 @@ class EpsLoader(EnsembleLoader):
 class GefsLoader(EnsembleLoader):
     def __init__(self):
         super().__init__()
-        self.forecast_hours = list(
-            range(6, self.forecast_length + self.step_size, self.step_size)
-        )
         self.grib_file = "grib/gefs.grib"
         self.netcdf_file = "grib/gefs.nc"
 
@@ -369,6 +352,10 @@ class GefsLoader(EnsembleLoader):
 
 
 def swe_to_in(units: str):
+    IN_PER_M = 39.37
+    IN_PER_MM = 1 / 25.4
+    WATER_DENSITY = 1000  # kg/m3
+
     if units == "m":
         conversion = IN_PER_M
     elif units == "mm":
@@ -376,7 +363,7 @@ def swe_to_in(units: str):
     elif units == "kg m**-2":
         conversion = (1 / WATER_DENSITY) * IN_PER_M
     else:
-        ValueError(f"Unimplemented Unit conversion {units}")
+        raise ValueError(f"Unimplemented Unit conversion: {units} to in")
 
     return conversion
 
@@ -419,7 +406,7 @@ class Ensemble:
 
         if downscale:
             ratio = self.downscale_ds.interp(latitude=lat, longitude=lon).band_data
-            print(f"Ratio {ratio.values} at {lat},{lon}")
+            logging.info(f"Ratio {ratio.values} at {lat},{lon}")
             precip = ratio * precip * conversion
 
         plumes = []
@@ -477,8 +464,10 @@ class Ensemble:
             )
 
 
-def download_loader_forecast(loader: EnsembleLoader, cycle=None, force=False):
-    return loader().download_forecast(cycle)
+def download_loader_forecast(
+    loader_class: type[EnsembleLoader], cycle=None, force=False
+):
+    return loader_class().download_forecast(cycle, force)
 
 
 def download_all_forecasts(cycle=None, force=False):
@@ -548,7 +537,8 @@ def plume_plot(lon, lat, title="", return_bytes: bool = False):
     axs[1].axvline(day_7, color="gray", linestyle="--")
 
     boxplot_data = np.array(all_plumes)
-    axs[1].boxplot(boxplot_data, showfliers=False, whis=(10, 90), widths=0.25)
+    axs[1].boxplot(boxplot_data, showfliers=False, whis=(10, 90))
+    """
     axs[1].violinplot(
         boxplot_data,
         showmeans=True,
@@ -556,6 +546,7 @@ def plume_plot(lon, lat, title="", return_bytes: bool = False):
         showextrema=False,
         widths=0.8,
     )
+    """
 
     if return_bytes:
         with io.BytesIO() as bio:
