@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from dan_weather_suite.plotting import plot
 import dan_weather_suite.plotting.regions as regions
 import dask
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from dateutil.parser import isoparse
 from ecmwf.opendata import Client
 import io
@@ -21,7 +21,12 @@ import xarray as xr
 
 dask.config.set({"array.slicing.split_large_chunks": True})
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
+logger = logging.getLogger("ensemble")
+
+
+def parse_np_datetime64(t: np.datetime64):
+    return isoparse(str(t)).replace(tzinfo=timezone.utc)
 
 
 def round_to_nearest(x: float, options: Iterable[float] = [0.25, 0.4, 0.5]) -> float:
@@ -45,19 +50,19 @@ def set_ds_extent(ds, extent: regions.Extent):
 
 def download_bytes(url: str, params: dict = {}) -> bytes:
     try:
-        logging.info(f"downloading {url} {params}")
+        logger.info(f"downloading {url} {params}")
         resp = requests.get(url, params=params, timeout=600)
         if resp.status_code == 200:
             result = resp.content
             return result
         else:
-            error_str = logging.error(
+            error_str = logger.error(
                 f"Error downloading {url} status:{resp.status_code}, {resp.text}"
             )
             raise requests.exceptions.RequestException(error_str)
 
     except requests.exceptions.RequestException as e:
-        logging.error(f"Error downloading {url} status:{resp.status_code}, {e}")
+        logger.error(f"Error downloading {url} status:{resp.status_code}, {e}")
         return None
 
 
@@ -99,7 +104,7 @@ class EnsembleLoader(ABC):
 
     def download_forecast(self, cycle=None, force=False):
         print("download forecast")
-        logging.info("Downloading grib")
+        logger.info("Downloading grib")
         if force:
             if os.path.exists(self.netcdf_file):
                 os.remove(self.netcdf_file)
@@ -107,25 +112,25 @@ class EnsembleLoader(ABC):
                 os.remove(self.grib_file)
 
         if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
-            logging.info("Downloading grib")
+            logger.info("Downloading grib")
             self.download_grib(cycle)
             print("Processed grib")
             ds = self.process_grib()
-            logging.info("Setting CONUS extent")
+            logger.info("Setting CONUS extent")
             extent = regions.PRISM_EXTENT
             ds = set_ds_extent(ds, extent)
             retries = 0
             while retries <= 3:
                 try:
-                    logging.info("Saving to NETCDF")
+                    logger.info("Saving to NETCDF")
                     ds.to_netcdf(self.netcdf_file, mode="a")
                     break
                 except Exception as e:
-                    logging.error(f"Error saving NETCDF {self.netcdf_file}: {e}")
+                    logger.error(f"Error saving NETCDF {self.netcdf_file}: {e}")
                     ttime.sleep(3)
                     retries += 1
 
-        logging.info("Up to date")
+        logger.info("Up to date")
         return True
 
     @abstractmethod
@@ -256,7 +261,7 @@ class EpsLoader(EnsembleLoader):
     def download_grib(self, cycle=None):
         latest_init = self.get_latest_init()
         cycle = cycle or latest_init.hour
-        logging.info("EPS downloading", latest_init)
+        logger.info("EPS downloading", latest_init)
         self.client.retrieve(
             time=cycle,
             stream="enfo",
@@ -406,7 +411,7 @@ class Ensemble:
 
         if downscale:
             ratio = self.downscale_ds.interp(latitude=lat, longitude=lon).band_data
-            logging.info(f"Ratio {ratio.values} at {lat},{lon}")
+            logger.info(f"Ratio {ratio.values} at {lat},{lon}")
             precip = ratio * precip * conversion
 
         plumes = []
@@ -495,8 +500,13 @@ def plot_compare(ens: Ensemble):
     # plt.show()
 
 
-def xtick_formatter(t):
-    None
+def xtick_formatter(dt: datetime):
+    if dt.hour == 12:
+        return "12z"
+    if dt.hour == 0:
+        return "00z\n" + dt.strftime("%b-%d")
+    else:
+        return ""
 
 
 def plume_plot(lon, lat, title="", return_bytes: bool = False):
@@ -529,12 +539,6 @@ def plume_plot(lon, lat, title="", return_bytes: bool = False):
         )
 
     axs[0].legend()
-    fig.suptitle(f"{title} precipitation (in) lat: {lat} lon: {lon}")
-
-    # vertical line at day 7
-    day_7 = int(168 / 6)
-    axs[0].axvline(times[day_7], color="gray", linestyle="--")
-    axs[1].axvline(day_7, color="gray", linestyle="--")
 
     boxplot_data = np.array(all_plumes)
     axs[1].boxplot(boxplot_data, showfliers=False, whis=(10, 90))
@@ -547,6 +551,24 @@ def plume_plot(lon, lat, title="", return_bytes: bool = False):
         widths=0.8,
     )
     """
+
+    times_ticks = times[::2]
+    times_labels = [xtick_formatter(parse_np_datetime64(t)) for t in times_ticks]
+    axs[0].set_xticks(times_ticks, labels=times_labels)
+    axs[1].set_xticks(np.arange(1, len(times) + 1, 2), labels=times_labels)
+
+    fig.suptitle(f"{title} precipitation (in) lat: {lat} lon: {lon}")
+
+    # vertical line at day 7
+    day_7 = int(168 / 6)
+    axs[0].axvline(times[day_7], color="gray", linestyle="--")
+    axs[1].axvline(day_7, color="gray", linestyle="--")
+
+    # turn second y axis labels on
+    axs[1].yaxis.set_tick_params(labelleft=True)
+
+    axs[0].grid(axis="both", linestyle="--")
+    axs[1].grid(axis="both", linestyle="--")
 
     if return_bytes:
         with io.BytesIO() as bio:

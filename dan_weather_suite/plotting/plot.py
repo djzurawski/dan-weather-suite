@@ -301,8 +301,6 @@ def add_contourf(
             lons,
             lats,
             data,
-            # levels,
-            # levels=levels,
             norm=norm,
             cmap=cmap,
             transform=crs.PlateCarree(),
