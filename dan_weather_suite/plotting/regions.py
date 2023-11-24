@@ -82,3 +82,16 @@ CONUS_EXTENT = Extent(top=61, bottom=15, left=-130, right=-65)
 WEST_CONUS_EXTENT = Extent(left=-130, right=-95, bottom=25, top=55)
 
 PANGU_NA_EXTENT = Extent(top=72, bottom=15, left=-180, right=-40)
+
+
+PRISM_EXTENT = Extent(
+    top=49.93333367, bottom=24.06666701, left=-125.01666667, right=-66.48333336
+)
+
+SKI_TAOS = Label(text="Taos", lat=36.573, lon=-105.448)
+SKI_SANTA_FE = Label(text="Ski Santa Fe", lat=35.79, lon=-105.789)
+SANDIA_PEAK = Label(text="Sandia Peak", lat=35.2, lon=-106.429)
+
+BRECK = Label(text="Breck", lat=39.478, lon=-106.077)
+WINTER_PARK = Label(text="Winter Park", lat=39.867, lon=-105.77)
+BERTHOUD = Label(text="Winter Park", lat=39.80, lon=-105.77)
