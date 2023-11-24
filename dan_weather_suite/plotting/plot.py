@@ -1,16 +1,13 @@
-import matplotlib.pyplot as plt
-from matplotlib.cm import get_cmap
 import cartopy.crs as crs
 from cartopy.feature import NaturalEarthFeature, STATES, ShapelyFeature
 import cartopy.io.shapereader as shpreader
-import cartopy.crs as crs
-
-import pooch
-from zipfile import ZipFile
-
 import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+from matplotlib.cm import get_cmap
 import numpy as np
 import os
+import pooch
+from zipfile import ZipFile
 
 
 COUNTY_SHAPEFILE = "cb_2018_us_county_20m.shp"
@@ -275,14 +272,7 @@ def add_contour(
 
 
 def add_contourf(
-    fig,
-    ax,
-    lons,
-    lats,
-    data,
-    levels=None,
-    colors=None,
-    cmap=None,
+    fig, ax, lons, lats, data, levels=None, colors=None, cmap=None, **kwargs
 ):
     if colors is not None and levels is not None:
         cmap = mcolors.ListedColormap(colors)
@@ -293,29 +283,29 @@ def add_contourf(
         cmap = None
         norm = None
 
+    pcolormesh = kwargs.get("pcolormesh")
 
-    contours = ax.contourf(
-        lons,
-        lats,
-        data,
-        levels=levels,
-        norm=norm,
-        cmap=cmap,
-        transform=crs.PlateCarree(),
-    )
+    if not pcolormesh:
+        contours = ax.contourf(
+            lons,
+            lats,
+            data,
+            levels=levels,
+            norm=norm,
+            cmap=cmap,
+            transform=crs.PlateCarree(),
+        )
 
-    """
-    contours = ax.pcolormesh(
-        lons,
-        lats,
-        data,
-        # levels,
-        # levels=levels,
-        norm=norm,
-        cmap=cmap,
-        transform=crs.PlateCarree(),
-    )
-    """
+    else:
+        contours = ax.pcolormesh(
+            lons,
+            lats,
+            data,
+            norm=norm,
+            cmap=cmap,
+            transform=crs.PlateCarree(),
+        )
+
     fig.colorbar(contours, ax=ax, orientation="vertical", pad=0.05)
     return fig, ax
 
@@ -420,6 +410,7 @@ def plot_swe(lons, lats, swe_in, **kwargs):
         swe_in,
         PRECIP_CLEVS,
         PRECIP_CMAP_DATA,
+        **kwargs,
     )
 
     if "u10" in kwargs and "v10" in kwargs:
