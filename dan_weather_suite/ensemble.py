@@ -100,7 +100,6 @@ class EnsembleLoader(ABC):
         return forecast_init == latest_init
 
     def download_forecast(self, cycle=None, force=False):
-        print("download forecast")
         logger.info("Downloading grib")
         if force:
             if os.path.exists(self.netcdf_file):
@@ -109,9 +108,9 @@ class EnsembleLoader(ABC):
                 os.remove(self.grib_file)
 
         if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
-            logger.info("Downloading grib")
+            logger.info(f"Downloading grib {cycle}")
             self.download_grib(cycle)
-            print("Processed grib")
+            logger.info("Processed grib")
             ds = self.process_grib()
             logger.info("Setting CONUS extent")
             extent = regions.PRISM_EXTENT
@@ -263,7 +262,8 @@ class EpsLoader(EnsembleLoader):
 
     def download_grib(self, cycle=None):
         latest_init = self.get_latest_init()
-        cycle = cycle or latest_init.hour
+        if cycle is None:
+            cycle = latest_init.hour
         logger.info(f"EPS downloading {latest_init}")
         self.client.retrieve(
             time=cycle,
