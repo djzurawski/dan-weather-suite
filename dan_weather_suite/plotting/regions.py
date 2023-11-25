@@ -39,17 +39,40 @@ class Region(BaseModel):
     display_counties: bool = False
 
 
+# New Mexico
+SANDIA_PEAK = Label(text="Sandia Peak", lat=35.2, lon=-106.429)
+SKI_SANTA_FE = Label(text="Ski Santa Fe", lat=35.79, lon=-105.789)
+TAOS = Label(text="Taos Ski Valley", lat=36.573, lon=-105.448)
+
+# Colorado
+ABASIN = Label(text="Abasin", lat=39.635, lon=-105.871)
+BERTHOUD_PASS = Label(text="Berthoud Pass", lat=39.80, lon=-105.77)
+BOULDER = Label(text="Boulder", lat=40.01, lon=-105.27)
+BRECKENRIDGE = Label(text="Breckenridge", lat=39.478, lon=-106.077)
+COPPER = Label(text="Copper", lat=39.485, lon=-106.16)
+ELDORA = Label(text="Eldora", lat=39.94, lon=-105.596)
+KEYSTONE = Label(text="Keystone", lat=39.58, lon=-105.94)
+LOVELAND = Label(text="Loveland", lat=39.673, lon=-105.908)
+STEAMBOAT = Label(text="Steamboat", lat=40.46, lon=-106.76)
+WINTER_PARK = Label(text="Winter Park", lat=39.867, lon=-105.77)
+WOLF_CREEK = Label(text="Wolf Creek", lat=37.47, lon=-106.80)
+VAIL = Label(text="Vail", lat=39.61, lon=-106.375)
+
+# Utah
+ALTA_SNOWBIRD = Label(text="Alta-Snowbird", lat=40.577, lon=-111.63)
+BRIGHTON = Label(text="Brighton", lat=40.60, lon=-111.57)
+PARK_CITY = Label(text="Park City-Deer Valley", lat=40.625, lon=-111.5)
+POWDER_MOUNTAIN = Label(text="Powder Mtn", lat=41.38, lon=-111.78)
+SNOWBASIN = Label(text="Snowbasin", lat=41.2, lon=-111.855)
+
+# Wyoming
+GRAND_TARGHEE = Label(text="Grand Targhee", lat=43.783, lon=-110.944)
+JACKSON_HOLE = Label(text="Jackson Hole", lat=43.59, lon=-110.87)
+
+
 FRONT_RANGE_EXTENT = Extent(top=40.9, bottom=38.25, left=-107.9, right=-104.6)
 
-FRONT_RANGE_LABELS = [
-    Label(text="Abasin", lat=39.635, lon=-105.871),
-    Label(text="Boulder", lat=40.01, lon=-105.27),
-    Label(text="Copper", lat=39.485, lon=-106.16),
-    Label(text="Eldora", lat=39.94, lon=-105.595),
-    Label(text="Steamboat", lat=40.46, lon=-106.76),
-    Label(text="Vail", lat=39.61, lon=-106.375),
-    Label(text="Winter Park", lat=39.867, lon=-105.77),
-]
+FRONT_RANGE_LABELS = [ABASIN, BOULDER, COPPER, ELDORA, STEAMBOAT, VAIL, WINTER_PARK]
 
 
 FRONT_RANGE = Region(
@@ -62,12 +85,7 @@ FRONT_RANGE = Region(
 
 WASATCH_EXTENT = Extent(top=41.5, bottom=40, left=-112.5, right=-111.0)
 
-WASATCH_LABELS = [
-    Label(text="Powder Mtn", lat=41.38, lon=-111.78),
-    Label(text="Snowbasin", lat=41.2, lon=-111.855),
-    Label(text="Alta-Snowbird", lat=40.577, lon=-111.63),
-    Label(text="Park City-Deer Valley", lat=40.625, lon=-111.5),
-]
+WASATCH_LABELS = [POWDER_MOUNTAIN, SNOWBASIN, ALTA_SNOWBIRD, PARK_CITY]
 
 
 WASATCH = Region(
@@ -88,10 +106,31 @@ PRISM_EXTENT = Extent(
     top=49.93333367, bottom=24.06666701, left=-125.01666667, right=-66.48333336
 )
 
-SKI_TAOS = Label(text="Taos", lat=36.573, lon=-105.448)
-SKI_SANTA_FE = Label(text="Ski Santa Fe", lat=35.79, lon=-105.789)
-SANDIA_PEAK = Label(text="Sandia Peak", lat=35.2, lon=-106.429)
 
-BRECK = Label(text="Breck", lat=39.478, lon=-106.077)
-WINTER_PARK = Label(text="Winter Park", lat=39.867, lon=-105.77)
-BERTHOUD = Label(text="Winter Park", lat=39.80, lon=-105.77)
+DANSEMBLE_SELECT = sorted(
+    [
+        SANDIA_PEAK,
+        SKI_SANTA_FE,
+        TAOS,
+        ABASIN,
+        BERTHOUD_PASS,
+        BOULDER,
+        BRECKENRIDGE,
+        COPPER,
+        ELDORA,
+        KEYSTONE,
+        LOVELAND,
+        STEAMBOAT,
+        WINTER_PARK,
+        WOLF_CREEK,
+        VAIL,
+        ALTA_SNOWBIRD,
+        BRIGHTON,
+        PARK_CITY,
+        POWDER_MOUNTAIN,
+        SNOWBASIN,
+        GRAND_TARGHEE,
+        JACKSON_HOLE,
+    ],
+    key=lambda x: x.text,
+)
