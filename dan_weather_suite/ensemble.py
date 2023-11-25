@@ -824,10 +824,10 @@ def plume_plot_snow(lon, lat, title="", return_bytes: bool = False):
     axs[1, 1].grid(axis="both", linestyle="--")
 
     # Subplot titles
-    axs[0, 0].title.set_text("Precipitation")
-    axs[0, 1].title.set_text("Precipitation")
-    axs[1, 0].title.set_text("Snow")
-    axs[1, 1].title.set_text("Snow")
+    axs[0, 0].title.set_text("Accumulated Precipitation")
+    axs[0, 1].title.set_text("Accumulated Precipitation")
+    axs[1, 0].title.set_text("Accumulated Snow")
+    axs[1, 1].title.set_text("Accumulated Snow")
 
     # Subplot ylabels
     axs[0, 0].set_ylabel("Precip (in)")
