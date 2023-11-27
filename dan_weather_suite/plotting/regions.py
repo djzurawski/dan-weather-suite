@@ -57,17 +57,27 @@ STEAMBOAT = Label(text="Steamboat", lat=40.46, lon=-106.76)
 WINTER_PARK = Label(text="Winter Park", lat=39.867, lon=-105.77)
 WOLF_CREEK = Label(text="Wolf Creek", lat=37.47, lon=-106.80)
 VAIL = Label(text="Vail", lat=39.61, lon=-106.375)
+TOWER_SNOTEL = Label(text="Tower SNOTEL, CO", lat=40.54, lon=-106.68)
 
 # Utah
 ALTA_SNOWBIRD = Label(text="Alta-Snowbird", lat=40.577, lon=-111.63)
 BRIGHTON = Label(text="Brighton", lat=40.60, lon=-111.57)
 PARK_CITY = Label(text="Park City-Deer Valley", lat=40.625, lon=-111.5)
+
+PARK_CITY_SUMMIT = Label(text="Park City Summit", lat=40.61, lon=-111.55)
+PARK_CITY_BASE = Label(text="Park City Base", lat=40.65, lon=-111.52)
+DEER_VALLEY = Label(text="Deer Valley", lat=40.62, lon=-111.50)
+
 POWDER_MOUNTAIN = Label(text="Powder Mtn", lat=41.38, lon=-111.78)
-SNOWBASIN = Label(text="Snowbasin", lat=41.2, lon=-111.855)
+SNOWBASIN = Label(text="Snowbasin", lat=41.2, lon=-111.863)
+
+# Montana
+BIG_SKY = Label(text="Big Sky", lat=45.27, lon=-111.45)
 
 # Wyoming
-GRAND_TARGHEE = Label(text="Grand Targhee", lat=43.783, lon=-110.944)
-JACKSON_HOLE = Label(text="Jackson Hole", lat=43.59, lon=-110.87)
+GRAND_TARGHEE = Label(text="Grand Targhee", lat=43.787, lon=-110.936)
+JACKSON_HOLE_R = Label(text="Jackson Hole Rendezvous Bowl", lat=43.59, lon=-110.87)
+JACKSON_HOLE = Label(text="Jackson Hole Mid Mtn", lat=43.598, lon=-110.840)
 
 
 FRONT_RANGE_EXTENT = Extent(top=40.9, bottom=38.25, left=-107.9, right=-104.6)
@@ -124,13 +134,18 @@ DANSEMBLE_SELECT = sorted(
         WINTER_PARK,
         WOLF_CREEK,
         VAIL,
+        TOWER_SNOTEL,
         ALTA_SNOWBIRD,
         BRIGHTON,
-        PARK_CITY,
+        PARK_CITY_SUMMIT,
+        PARK_CITY_BASE,
+        DEER_VALLEY,
         POWDER_MOUNTAIN,
         SNOWBASIN,
+        BIG_SKY,
         GRAND_TARGHEE,
         JACKSON_HOLE,
+        JACKSON_HOLE_R,
     ],
     key=lambda x: x.text,
 )
