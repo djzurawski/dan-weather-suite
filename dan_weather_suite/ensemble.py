@@ -838,6 +838,7 @@ def plume_plot_snow(lon, lat, title="", return_bytes: bool = False):
     if return_bytes:
         with io.BytesIO() as bio:
             plt.savefig(bio, format="jpg", bbox_inches="tight")
+            plt.close(fig)
             return bio.getvalue()
 
     plt.show()
