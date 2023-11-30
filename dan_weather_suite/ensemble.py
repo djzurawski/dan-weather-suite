@@ -656,12 +656,17 @@ def xtick_formatter(dt: datetime):
         return ""
 
 
-def plume_plot(lon, lat, title="", return_bytes: bool = False):
-    eps = Ensemble(EpsLoader(), "ECMWF ENS", "green")
-    gefs = Ensemble(GefsLoader(), "GEFS", "red")
-    geps = Ensemble(GepsLoader(), "CMCE", "blue")
+def plume_plot(lon, lat, title="", models=[], return_bytes: bool = False):
+    LOADERS = {
+        "GEFS": (GefsLoader(), "GEFS", "red"),
+        "CMCE": (GepsLoader(), "CMCE", "blue"),
+        "ECMWF": (EpsLoader(), "ECMWF ENS", "green"),
+    }
 
-    ensembles = [geps, gefs, eps]
+    if not models:
+        ensembles = [Ensemble(*loader) for loader in LOADERS.values()]
+    else:
+        ensembles = [Ensemble(*LOADERS[model]) for model in models]
 
     fig, axs = plt.subplots(1, 2, figsize=(16, 5), sharey=True)
     plt.tight_layout(pad=2)
@@ -725,12 +730,18 @@ def plume_plot(lon, lat, title="", return_bytes: bool = False):
     plt.show()
 
 
-def plume_plot_snow(lon, lat, title="", return_bytes: bool = False):
-    eps = Ensemble(EpsLoader(), "ECMWF ENS", "green")
-    gefs = Ensemble(GefsLoader(), "GEFS", "red")
-    geps = Ensemble(GepsLoader(), "CMCE", "blue")
+def plume_plot_snow(lon, lat, title="", models=[], return_bytes: bool = False):
+    LOADERS = {
+        "GEFS": (GefsLoader(), "GEFS", "red"),
+        "CMCE": (GepsLoader(), "CMCE", "blue"),
+        "ECMWF": (EpsLoader(), "ECMWF ENS", "green"),
+    }
 
-    ensembles = [geps, gefs, eps]
+    if not models:
+        ensembles = [Ensemble(*loader) for loader in LOADERS.values()]
+    else:
+        ensembles = [Ensemble(*LOADERS[model]) for model in models]
+
     nbm = NbmLoader()
     slr = nbm.forecast_slr(lon, lat)
 
