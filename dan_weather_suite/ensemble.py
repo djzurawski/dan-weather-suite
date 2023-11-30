@@ -437,6 +437,7 @@ class NbmLoader(ModelLoader):
             "dir": f"/blend.{day_str}/{cycle_str}/core",
             "file": f"blend.t{cycle_str}z.core.f{fhour_str}.co.grib2",
             "var_SNOWLR": "on",
+            "var_SNOWLVL": "on",
             "subregion": "",
             "toplat": top,
             "leftlon": left,
@@ -468,8 +469,17 @@ class NbmLoader(ModelLoader):
             f.write(concatenated_bytes)
 
     def process_grib(self) -> xr.Dataset:
-        ds = xr.open_dataset(self.grib_file)
-        ds = ds.rename({"unknown": "slr"})
+        ds_slr = xr.open_dataset(
+            self.grib_file, filter_by_keys={"typeOfLevel": "surface"}
+        )
+        ds_snowlvl = xr.open_dataset(
+            self.grib_file, filter_by_keys={"typeOfLevel": "heightAboveSea"}
+        )
+
+        ds_slr = ds_slr.rename({"unknown": "slr"})
+        ds_snowlvl = ds_snowlvl.rename({"unknown": "snow_level"})
+
+        ds = ds_slr.merge(ds_snowlvl.snow_level)
         ds["longitude"] = (ds["longitude"] + 180) % 360 - 180
         return ds
 
