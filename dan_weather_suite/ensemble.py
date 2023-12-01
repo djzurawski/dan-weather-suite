@@ -133,10 +133,10 @@ class ModelLoader(ABC):
 
     def download_forecast(self, cycle=None, force=False):
         logger.info("Downloading grib")
+
         if force:
-            if os.path.exists(self.netcdf_file):
-                os.remove(self.netcdf_file)
             if os.path.exists(self.grib_file):
+                # delete netcdf later to preserve website uptime
                 os.remove(self.grib_file)
 
         if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
@@ -151,6 +151,8 @@ class ModelLoader(ABC):
             while retries <= 3:
                 try:
                     logger.info("Saving to NETCDF")
+                    if force and os.path.exists(self.netcdf_file):
+                        os.remove(self.netcdf_file)
                     ds.to_netcdf(self.netcdf_file, mode="a")
                     logger.info("Up to date")
                     return True
@@ -348,7 +350,7 @@ class GefsLoader(ModelLoader):
                 url, params = self.url_formatter(init_dt, fhour, member)
                 # urls.append(self.url_formatter(init_dt, fhour, member))
                 grib_bytes.append(download_bytes(url, params))
-                ttime.sleep(0.2)
+                ttime.sleep(0.1)
 
         concatenated_bytes = b"".join(
             result for result in grib_bytes if result is not None
@@ -459,7 +461,7 @@ class NbmLoader(ModelLoader):
                 fhour,
             )
             grib_bytes.append(download_bytes(url, params))
-            ttime.sleep(0.2)
+            ttime.sleep(0.1)
 
         concatenated_bytes = b"".join(
             result for result in grib_bytes if result is not None
@@ -537,7 +539,7 @@ class Ensemble:
 
         units = ds.tp.units
         conversion = swe_to_in(units)
-        precip = ds.tp.interp(latitude=lat, longitude=lon)
+        precip = conversion * ds.tp.interp(latitude=lat, longitude=lon)
 
         times = precip.valid_time.values
         # add t0 to ensembles which forecast starts at 6h
@@ -548,7 +550,7 @@ class Ensemble:
         if downscale:
             ratio = self.downscale_ds.interp(latitude=lat, longitude=lon).band_data
             logger.info(f"Ratio {ratio.values} at {lat},{lon}")
-            precip = ratio * precip * conversion
+            precip = ratio * precip
 
         plumes = []
         for n in precip.number:
@@ -656,7 +658,9 @@ def xtick_formatter(dt: datetime):
         return ""
 
 
-def plume_plot(lon, lat, title="", models=[], return_bytes: bool = False):
+def plume_plot(
+    lon, lat, title="", models=[], downscale=True, return_bytes: bool = False
+):
     LOADERS = {
         "GEFS": (GefsLoader(), "GEFS", "red"),
         "CMCE": (GepsLoader(), "CMCE", "blue"),
@@ -673,7 +677,7 @@ def plume_plot(lon, lat, title="", models=[], return_bytes: bool = False):
 
     all_plumes = []
     for ensemble in ensembles:
-        times, plumes = ensemble.point_plumes(lon, lat)
+        times, plumes = ensemble.point_plumes(lon, lat, downscale=downscale)
         for plume in plumes:
             axs[0].plot(
                 times, plume, color=ensemble.plume_color, alpha=0.3, linewidth=1
@@ -730,7 +734,9 @@ def plume_plot(lon, lat, title="", models=[], return_bytes: bool = False):
     plt.show()
 
 
-def plume_plot_snow(lon, lat, title="", models=[], return_bytes: bool = False):
+def plume_plot_snow(
+    lon, lat, title="", models=[], downscale=True, return_bytes: bool = False
+):
     LOADERS = {
         "GEFS": (GefsLoader(), "GEFS", "red"),
         "CMCE": (GepsLoader(), "CMCE", "blue"),
@@ -754,7 +760,7 @@ def plume_plot_snow(lon, lat, title="", models=[], return_bytes: bool = False):
     all_precip = []
     all_snow = []
     for ensemble in ensembles:
-        times, plumes = ensemble.point_plumes(lon, lat)
+        times, plumes = ensemble.point_plumes(lon, lat, downscale=downscale)
 
         snow_plumes = np.zeros(plumes.shape)
         precip_rate = np.diff(plumes, axis=1)
