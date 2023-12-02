@@ -532,14 +532,20 @@ class Ensemble:
         return self.ds.valid_time.values[0] == self.ds.time.values
 
     def point_plumes(
-        self, lon: float, lat: float, downscale=True, accum_snow=False
+        self, lon: float, lat: float, downscale=True, nearest=False, accum_snow=False
     ) -> Tuple[NDArray[np.datetime64], NDArray[float]]:
         ds = self.ds
         prepend_t0 = not self._forecast_starts_at_init()
 
         units = ds.tp.units
         conversion = swe_to_in(units)
-        precip = conversion * ds.tp.interp(latitude=lat, longitude=lon)
+
+        if nearest:
+            precip = conversion * ds.tp.sel(
+                latitude=lat, longitude=lon, method="nearest"
+            )
+        else:
+            precip = conversion * ds.tp.interp(latitude=lat, longitude=lon)
 
         times = precip.valid_time.values
         # add t0 to ensembles which forecast starts at 6h
@@ -547,8 +553,26 @@ class Ensemble:
             t0 = times[0] - np.timedelta64(6, "h")
             times = np.concatenate([[t0], times])
 
-        if downscale:
-            ratio = self.downscale_ds.interp(latitude=lat, longitude=lon).band_data
+        if nearest and downscale:
+            model_resolution_deg = np.abs(np.diff(sorted(ds.latitude)))[0]
+            center_lat = precip.latitude
+            center_lon = precip.longitude
+
+            top_lat = center_lat + (model_resolution_deg / 2)
+            bottom_lat = center_lat - (model_resolution_deg / 2)
+            left_lon = center_lon - (model_resolution_deg / 2)
+            right_lon = center_lon + (model_resolution_deg / 2)
+            extent = regions.Extent(
+                top=top_lat, bottom=bottom_lat, left=left_lon, right=right_lon
+            )
+            grid_prism_ds = set_ds_extent(self.downscale_ds, extent)
+            grid_mean = grid_prism_ds.prism.mean()
+            point = self.downscale_ds.prism.interp(latitude=lat, longitude=lon)
+            ratio = point / grid_mean
+            precip = ratio * precip
+
+        elif downscale:
+            ratio = self.downscale_ds.interp(latitude=lat, longitude=lon).ratio
             logger.info(f"Ratio {ratio.values} at {lat},{lon}")
             precip = ratio * precip
 
@@ -607,7 +631,7 @@ class Ensemble:
             )
 
             if ratio:
-                precip_points = self.downscale_ds.band_data * precip_points
+                precip_points = self.downscale_ds.ratio * precip_points
 
             return (
                 precip_points.longitude.values,
@@ -735,7 +759,13 @@ def plume_plot(
 
 
 def plume_plot_snow(
-    lon, lat, title="", models=[], downscale=True, return_bytes: bool = False
+    lon,
+    lat,
+    title="",
+    models=[],
+    downscale=True,
+    nearest=False,
+    return_bytes: bool = False,
 ):
     LOADERS = {
         "GEFS": (GefsLoader(), "GEFS", "red"),
@@ -760,7 +790,9 @@ def plume_plot_snow(
     all_precip = []
     all_snow = []
     for ensemble in ensembles:
-        times, plumes = ensemble.point_plumes(lon, lat, downscale=downscale)
+        times, plumes = ensemble.point_plumes(
+            lon, lat, downscale=downscale, nearest=nearest
+        )
 
         snow_plumes = np.zeros(plumes.shape)
         precip_rate = np.diff(plumes, axis=1)
