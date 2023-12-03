@@ -1,4 +1,4 @@
-from dan_weather_suite.models import ModelLoader
+from dan_weather_suite.models.loader import ModelLoader
 import dan_weather_suite.plotting.regions as regions
 import dan_weather_suite.utils as utils
 from datetime import datetime, time, timedelta
@@ -16,13 +16,22 @@ logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 
 
 class NbmLoader(ModelLoader):
-    def __init__(self):
+    def __init__(self, short_range=False):
         super().__init__()
-        self.forecast_hours = list(
-            range(6, self.forecast_length + self.step_size, self.step_size)
-        )
-        self.grib_file = "grib/nbm.grib"
-        self.netcdf_file = "grib/nbm.nc"
+        if not short_range:
+            self.forecast_hours = list(
+                range(6, self.forecast_length + self.step_size, self.step_size)
+            )
+            self.grib_file = "grib/nbm.grib"
+            self.netcdf_file = "grib/nbm.nc"
+        else:
+            self.step_size = 1
+            self.forecast_length = 48
+            self.forecast_hours = list(
+                range(1, self.forecast_length + self.step_size, self.step_size)
+            )
+            self.grib_file = "grib/nbm-short.grib"
+            self.netcdf_file = "grib/nbm-short.nc"
 
     def get_latest_init(self) -> datetime:
         current_utc = datetime.utcnow()
@@ -73,20 +82,20 @@ class NbmLoader(ModelLoader):
             init_dt = init_dt.replace(hour=cycle)
 
         # Need to download serially...slowly because of NOAA grib server request limits
-        grib_bytes = []
-        for fhour in self.forecast_hours:
-            url, params = self.url_formatter(
-                init_dt,
-                fhour,
-            )
-            grib_bytes.append(utils.download_bytes(url, params))
-            ttime.sleep(0.1)
 
-        concatenated_bytes = b"".join(
-            result for result in grib_bytes if result is not None
-        )
-        with open(self.grib_file, "wb") as f:
-            f.write(concatenated_bytes)
+        if os.path.exists(self.grib_file):
+            os.remove(self.grib_file)
+
+        with open(self.grib_file, "ab") as f:
+            for fhour in self.forecast_hours:
+                url, params = self.url_formatter(
+                    init_dt,
+                    fhour,
+                )
+                data = utils.download_bytes(url, params)
+                if data:
+                    f.write(data)
+                ttime.sleep(0.1)
 
     def process_grib(self) -> xr.Dataset:
         ds = xr.open_dataset(self.grib_file)

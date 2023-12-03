@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, time
+import dan_weather_suite.plotting.regions as regions
+import dan_weather_suite.utils as utils
 from dateutil.parser import isoparse
 import logging
 import os
@@ -7,6 +9,7 @@ import time as ttime
 import xarray as xr
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
+
 
 class ModelLoader(ABC):
     def __init__(self):
@@ -40,6 +43,10 @@ class ModelLoader(ABC):
                 # delete netcdf later to preserve website uptime
                 os.remove(self.grib_file)
 
+            if os.path.exists(self.grib_file):
+                # delete netcdf later to preserve website uptime
+                os.remove(self.grib_file)
+
         if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
             logging.info(f"Downloading grib {cycle}")
             self.download_grib(cycle)
@@ -47,7 +54,7 @@ class ModelLoader(ABC):
             ds = self.process_grib()
             logging.info("Setting CONUS extent")
             extent = regions.PRISM_EXTENT
-            ds = set_ds_extent(ds, extent)
+            ds = utils.set_ds_extent(ds, extent)
             retries = 0
             while retries <= 3:
                 try:
