@@ -1,514 +1,26 @@
-from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, ProcessPoolExecutor
-from collections.abc import Iterable
+from concurrent.futures import ProcessPoolExecutor
+from dan_weather_suite.models.loader import ModelLoader
+from dan_weather_suite.models.gefs import GefsLoader
+from dan_weather_suite.models.geps import GepsLoader
+from dan_weather_suite.models.eps import EpsLoader
+from dan_weather_suite.models.nbm import NbmLoader
 from dan_weather_suite.plotting import plot
+import dan_weather_suite.utils as utils
 import dan_weather_suite.plotting.regions as regions
 import dask
-from datetime import datetime, time, timedelta, timezone
-from dateutil.parser import isoparse
-from ecmwf.opendata import Client
+from datetime import datetime
 import io
 import logging
 import matplotlib.pyplot as plt
 import numpy as np
 from numpy.typing import NDArray
-import os
-import pickle
-import requests
-from scipy.spatial import KDTree
-import time as ttime
 from typing import Tuple
 import xarray as xr
-
 
 dask.config.set({"array.slicing.split_large_chunks": True})
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 logger = logging.getLogger("ensemble")
-
-
-def parse_np_datetime64(t: np.datetime64) -> datetime:
-    return isoparse(str(t)).replace(tzinfo=timezone.utc)
-
-
-def round_to_nearest(x: float, options: Iterable[float] = [0.25, 0.4, 0.5]) -> float:
-    "Rounds x to the nearest value in 'options'"
-    assert options, "options cannot be empty"
-
-    closest = min(options, key=lambda opt: abs(opt - x))
-    return closest
-
-
-def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 6371  # Earth radius in kilometers
-
-    dLat = np.radians(lat2 - lat1)
-    dLon = np.radians(lon2 - lon1)
-    a = np.sin(dLat / 2) * np.sin(dLat / 2) + np.cos(np.radians(lat1)) * np.cos(
-        np.radians(lat2)
-    ) * np.sin(dLon / 2) * np.sin(dLon / 2)
-    c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1 - a))
-    distance = R * c
-    return distance
-
-
-def swe_to_in(units: str) -> float:
-    IN_PER_M = 39.37
-    IN_PER_MM = 1 / 25.4
-    WATER_DENSITY = 1000  # kg/m3
-
-    if units == "m":
-        conversion = IN_PER_M
-    elif units == "mm":
-        conversion = IN_PER_MM
-    elif units == "kg m**-2":
-        conversion = (1 / WATER_DENSITY) * IN_PER_M
-    else:
-        raise ValueError(f"Unimplemented Unit conversion: {units} to in")
-
-    return conversion
-
-
-def set_ds_extent(ds: xr.Dataset, extent: regions.Extent) -> xr.Dataset:
-    left = extent.left
-    right = extent.right
-    top = extent.top
-    bottom = extent.bottom
-    x_condition = (ds.longitude >= left) & (ds.longitude <= right)
-    y_condition = (ds.latitude >= bottom) & (ds.latitude <= top)
-    trimmed = ds.where(x_condition & y_condition, drop=True)
-    return trimmed
-
-
-def download_bytes(url: str, params: dict = {}) -> bytes:
-    try:
-        logger.info(f"downloading {url} {params}")
-        resp = requests.get(url, params=params, timeout=600)
-        if resp.status_code == 200:
-            result = resp.content
-            return result
-        else:
-            error_str = logger.error(
-                f"Error downloading {url} status:{resp.status_code}, {resp.text}"
-            )
-            raise requests.exceptions.RequestException(error_str)
-
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Error downloading {url} status:{resp.status_code}, {e}")
-        return None
-
-
-def download_and_combine_gribs(urls: list[Tuple[str, dict]], threads=1) -> bytes:
-    with ThreadPoolExecutor(threads) as executor:
-        results = list(executor.map(lambda x: download_bytes(*x), urls))
-        concatenated_bytes = b"".join(
-            result for result in results if result is not None
-        )
-        return concatenated_bytes
-
-
-class ModelLoader(ABC):
-    def __init__(self):
-        self.step_size = 6
-        self.forecast_length = 240
-
-    @abstractmethod
-    def get_latest_init(self) -> datetime:
-        """
-        Infers the latest forecat initialization time
-        """
-        pass
-
-    def is_current(self, cycle=None) -> bool:
-        """
-        Checks if grib on disk is latest forecast
-        """
-
-        ds = xr.open_dataset(self.netcdf_file)
-        forecast_init = isoparse(str(ds.time.values))
-        latest_init = self.get_latest_init()
-        if cycle is not None:
-            latest_init = latest_init.replace(hour=cycle)
-        return forecast_init == latest_init
-
-    def download_forecast(self, cycle=None, force=False):
-        logger.info("Downloading grib")
-
-        if force:
-            if os.path.exists(self.grib_file):
-                # delete netcdf later to preserve website uptime
-                os.remove(self.grib_file)
-
-        if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
-            logger.info(f"Downloading grib {cycle}")
-            self.download_grib(cycle)
-            logger.info("Processed grib")
-            ds = self.process_grib()
-            logger.info("Setting CONUS extent")
-            extent = regions.PRISM_EXTENT
-            ds = set_ds_extent(ds, extent)
-            retries = 0
-            while retries <= 3:
-                try:
-                    logger.info("Saving to NETCDF")
-                    if force and os.path.exists(self.netcdf_file):
-                        os.remove(self.netcdf_file)
-                    ds.to_netcdf(self.netcdf_file, mode="a")
-                    logger.info("Up to date")
-                    return True
-                except Exception as e:
-                    logger.error(f"Error saving NETCDF {self.netcdf_file}: {e}")
-                    ttime.sleep(3)
-                    retries += 1
-
-            return False
-
-    @abstractmethod
-    def download_grib(self):
-        """
-        Downloads latest forecast
-        """
-        pass
-
-    def process_grib(self) -> xr.Dataset:
-        """
-        Loads downloaded grib on disk.
-        Combines control and perturbed members into one xr.Dataset
-        """
-
-        ds_c = xr.open_dataset(
-            self.grib_file, filter_by_keys={"dataType": "cf"}, chunks={}
-        )
-        ds_p = xr.open_dataset(
-            self.grib_file, filter_by_keys={"dataType": "pf"}, chunks={}
-        )
-
-        # add on the control member to the perturbed
-        ds_c_expanded = ds_c.expand_dims("number", axis=1)
-
-        ds = xr.concat([ds_c_expanded, ds_p], "number")
-
-        return ds
-
-    def open_dataset(self) -> xr.Dataset:
-        return xr.open_dataset(self.netcdf_file)
-
-
-class GepsLoader(ModelLoader):
-    def __init__(self):
-        super().__init__()
-        self.forecast_hours = list(
-            range(6, self.forecast_length + self.step_size, self.step_size)
-        )
-        self.grib_file = "grib/geps.grib"
-        self.netcdf_file = "grib/geps.nc"
-
-    def get_latest_init(self) -> datetime:
-        current_utc = datetime.utcnow()
-        current_utc_time = current_utc.time()
-
-        release_00z = time(4, 45)
-        release_12z = time(16, 45)
-
-        if release_00z <= current_utc_time < release_12z:
-            return datetime(current_utc.year, current_utc.month, current_utc.day, 0, 0)
-        elif current_utc_time >= release_12z:
-            return datetime(current_utc.year, current_utc.month, current_utc.day, 12, 0)
-        else:
-            previous_day = current_utc - timedelta(days=1)
-            return datetime(
-                previous_day.year, previous_day.month, previous_day.day, 12, 0
-            )
-
-    def download_grib(self, cycle=None):
-        init_dt = self.get_latest_init()
-        if cycle is not None:
-            init_dt = init_dt.replace(hour=cycle)
-
-        urls = [self.url_formatter(init_dt, fhour) for fhour in self.forecast_hours]
-
-        grib_bytes = download_and_combine_gribs(urls)
-
-        with open(self.grib_file, "wb") as f:
-            f.write(grib_bytes)
-
-    def url_formatter(self, init_dt: datetime, fhour) -> Tuple[str, dict]:
-        day_str = init_dt.strftime("%Y%m%d%H")
-        cycle_str = str(init_dt.hour).zfill(2)
-        fhour_str = str(fhour).zfill(3)
-
-        root_url = "https://dd.weather.gc.ca/ensemble/geps/grib2/raw"
-
-        return (
-            (
-                f"{root_url}/{cycle_str}/{fhour_str}/"
-                f"CMC_geps-raw_APCP_SFC_0_latlon0p5x0p5_{day_str}_P{fhour_str}_allmbrs"
-                ".grib2"
-            ),
-            root_url,
-        )
-
-    def process_grib(self) -> xr.Dataset:
-        ds = super().process_grib()
-        ds = ds.rename({"unknown": "tp"})
-        ds["tp"].attrs["units"] = "mm"
-        ds["tp"].attrs["GRIB_units"] = "mm"
-        ds["tp"].attrs["GRIB_shortName"] = "tp"
-        ds["tp"].attrs["long_name"] = "Total Precipitation"
-        ds["longitude"] = (ds["longitude"] + 180) % 360 - 180
-        ds = ds.sortby(["longitude", "latitude"])
-        return ds
-
-
-class EpsLoader(ModelLoader):
-    def __init__(self):
-        super().__init__()
-        self.forecast_hours = list(
-            range(0, self.forecast_length + self.step_size, self.step_size)
-        )
-        self.client = Client(source="ecmwf")
-        self.grib_file = "grib/eps.grib"
-        self.netcdf_file = "grib/eps.nc"
-        self.z12_ready_time_utc = time(20, 30)
-        self.z00_ready_time_utc = time(8, 30)
-
-    def get_latest_init(self) -> datetime:
-        latest = self.client.latest(
-            stream="enfo",
-        )
-        # we're only use cycle 00 and 12
-        if latest.hour == 18:
-            latest = latest.replace(hour=12)
-        if latest.hour == 6:
-            latest = latest.replace(hour=0)
-
-        return latest
-
-    def is_current(self, cycle=None) -> bool:
-        latest = self.get_latest_init()
-        ds = self.open_dataset()
-        current = isoparse(str(ds.time.values))
-
-        if cycle is not None:
-            latest = latest.replace(hour=cycle)
-
-        return latest == current
-
-    def download_grib(self, cycle=None):
-        latest_init = self.get_latest_init()
-        if cycle is None:
-            cycle = latest_init.hour
-        logger.info(f"EPS downloading {cycle}")
-        self.client.retrieve(
-            time=cycle,
-            stream="enfo",
-            param="tp",
-            step=self.forecast_hours,
-            target=self.grib_file,
-        )
-
-
-class GefsLoader(ModelLoader):
-    def __init__(self):
-        super().__init__()
-        self.forecast_hours = list(
-            range(6, self.forecast_length + self.step_size, self.step_size)
-        )
-        self.grib_file = "grib/gefs.grib"
-        self.netcdf_file = "grib/gefs.nc"
-
-    def get_latest_init(self) -> datetime:
-        current_utc = datetime.utcnow()
-        current_utc_time = current_utc.time()
-
-        release_00z = time(5, 40)
-        release_12z = time(17, 30)
-
-        if release_00z <= current_utc_time < release_12z:
-            return datetime(current_utc.year, current_utc.month, current_utc.day, 0, 0)
-        elif current_utc_time >= release_12z:
-            return datetime(current_utc.year, current_utc.month, current_utc.day, 12, 0)
-        else:
-            previous_day = current_utc - timedelta(days=1)
-            return datetime(
-                previous_day.year, previous_day.month, previous_day.day, 12, 0
-            )
-
-    def download_grib(self, cycle=None):
-        init_dt = self.get_latest_init()
-        if cycle is not None:
-            init_dt = init_dt.replace(hour=cycle)
-        control_member = ["c00"]
-        perturbed_members = [f"p{str(i).zfill(2)}" for i in range(1, 31)]
-        members = control_member + perturbed_members
-
-        # urls = []
-        # Need to download serially...slowly because of NOAA grib server request limits
-        grib_bytes = []
-        for fhour in self.forecast_hours:
-            for member in members:
-                url, params = self.url_formatter(init_dt, fhour, member)
-                # urls.append(self.url_formatter(init_dt, fhour, member))
-                grib_bytes.append(download_bytes(url, params))
-                ttime.sleep(0.1)
-
-        concatenated_bytes = b"".join(
-            result for result in grib_bytes if result is not None
-        )
-        with open(self.grib_file, "wb") as f:
-            f.write(concatenated_bytes)
-
-    def url_formatter(
-        self, init_dt: datetime, fhour: int, member: str
-    ) -> Tuple[str, dict]:
-        day_str = init_dt.strftime("%Y%m%d")
-        cycle_str = str(init_dt.hour).zfill(2)
-        fhour_str = str(fhour).zfill(3)
-
-        extent = regions.PRISM_EXTENT
-        left = extent.left
-        right = extent.right
-        top = extent.top
-        bottom = extent.bottom
-
-        base_url = "https://nomads.ncep.noaa.gov/cgi-bin/filter_gefs_atmos_0p25s.pl"
-
-        params = {
-            "dir": f"/gefs.{day_str}/{cycle_str}/atmos/pgrb2sp25",
-            "file": f"ge{member}.t{cycle_str}z.pgrb2s.0p25.f{fhour_str}",
-            "var_APCP": "on",
-            "subregion": "",
-            "toplat": top,
-            "leftlon": left,
-            "rightlon": right,
-            "bottomlat": bottom,
-        }
-
-        return base_url, params
-
-    def process_grib(self) -> xr.Dataset:
-        ds = super().process_grib()
-        ds["tp"] = ds.tp.cumsum(dim="step")
-        ds["tp"].attrs["long_name"] = "Total Precipitation"
-        ds["tp"].attrs["units"] = "kg m**-2"
-        ds["longitude"] = (ds["longitude"] + 180) % 360 - 180
-        ds = ds.sortby(["longitude", "latitude"])
-        return ds
-
-
-class NbmLoader(ModelLoader):
-    def __init__(self):
-        super().__init__()
-        self.forecast_hours = list(
-            range(6, self.forecast_length + self.step_size, self.step_size)
-        )
-        self.grib_file = "grib/nbm.grib"
-        self.netcdf_file = "grib/nbm.nc"
-
-    def get_latest_init(self) -> datetime:
-        current_utc = datetime.utcnow()
-        current_utc_time = current_utc.time()
-
-        release_00z = time(1, 15)
-        release_12z = time(13, 15)
-
-        if release_00z <= current_utc_time < release_12z:
-            return datetime(current_utc.year, current_utc.month, current_utc.day, 0, 0)
-        elif current_utc_time >= release_12z:
-            return datetime(current_utc.year, current_utc.month, current_utc.day, 12, 0)
-        else:
-            previous_day = current_utc - timedelta(days=1)
-            return datetime(
-                previous_day.year, previous_day.month, previous_day.day, 12, 0
-            )
-
-    def url_formatter(self, init_dt: datetime, fhour: int) -> Tuple[str, dict]:
-        day_str = init_dt.strftime("%Y%m%d")
-        cycle_str = str(init_dt.hour).zfill(2)
-        fhour_str = str(fhour).zfill(3)
-
-        extent = regions.PRISM_EXTENT
-        left = extent.left
-        right = extent.right
-        top = extent.top
-        bottom = extent.bottom
-
-        base_url = "https://nomads.ncep.noaa.gov/cgi-bin/filter_blend.pl"
-
-        params = {
-            "dir": f"/blend.{day_str}/{cycle_str}/core",
-            "file": f"blend.t{cycle_str}z.core.f{fhour_str}.co.grib2",
-            "var_SNOWLR": "on",
-            "subregion": "",
-            "toplat": top,
-            "leftlon": left,
-            "rightlon": right,
-            "bottomlat": bottom,
-        }
-
-        return base_url, params
-
-    def download_grib(self, cycle=None):
-        init_dt = self.get_latest_init()
-        if cycle is not None:
-            init_dt = init_dt.replace(hour=cycle)
-
-        # Need to download serially...slowly because of NOAA grib server request limits
-        grib_bytes = []
-        for fhour in self.forecast_hours:
-            url, params = self.url_formatter(
-                init_dt,
-                fhour,
-            )
-            grib_bytes.append(download_bytes(url, params))
-            ttime.sleep(0.1)
-
-        concatenated_bytes = b"".join(
-            result for result in grib_bytes if result is not None
-        )
-        with open(self.grib_file, "wb") as f:
-            f.write(concatenated_bytes)
-
-    def process_grib(self) -> xr.Dataset:
-        ds = xr.open_dataset(self.grib_file)
-        ds = ds.rename({"unknown": "slr"})
-        ds["longitude"] = (ds["longitude"] + 180) % 360 - 180
-        return ds
-
-    def create_kdtree(self) -> KDTree:
-        "Create KD tree of ds coordinates"
-        ds = self.open_dataset()
-        pairs = np.dstack((ds.longitude, ds.latitude)).reshape(-1, 2)
-        tree = KDTree(pairs)
-        with open("nbm-tree.pkl", "wb") as f:
-            pickle.dump(tree, f)
-
-        return tree
-
-    def forecast_slr(self, lon, lat) -> NDArray:
-        ds = self.open_dataset()
-        k_nearest = 36
-        if not os.path.exists("nbm-tree.pkl"):
-            tree = self.create_kdtree()
-        else:
-            with open("nbm-tree.pkl", "rb") as f:
-                tree = pickle.load(f)
-
-        pairs = np.dstack((ds.longitude, ds.latitude)).reshape(-1, 2)
-        distances, indicies = tree.query([lon, lat], k_nearest)
-        nearest_points = pairs[indicies]
-
-        # (haversine dist, coord array indices)
-        nearest_points_idx = [
-            (haversine(lat, lon, nbm_lat, nbm_lon), idx)
-            for (nbm_lon, nbm_lat), idx in zip(nearest_points, indicies)
-        ]
-
-        nearest_point_km, nearest_idx = min(nearest_points_idx, key=lambda x: x[0])
-        logger.info(f"Nearest NBM: {pairs[nearest_idx]} {round(nearest_point_km,2)}km")
-
-        nearest_row, nearest_col = divmod(nearest_idx, ds.latitude.shape[1])
-        return ds.slr[..., nearest_row, nearest_col]
 
 
 class Ensemble:
@@ -523,7 +35,7 @@ class Ensemble:
         forecast_ds = self.loader.open_dataset()
         resolution_deg = np.abs(np.diff(forecast_ds.latitude))[0]
 
-        downscale_ds_number = round_to_nearest(resolution_deg)
+        downscale_ds_number = utils.round_to_nearest(resolution_deg)
         downscale_ds_file = f"{downscale_ds_number}deg-800m.nc"
         return xr.open_dataset(downscale_ds_file)
 
@@ -538,7 +50,7 @@ class Ensemble:
         prepend_t0 = not self._forecast_starts_at_init()
 
         units = ds.tp.units
-        conversion = swe_to_in(units)
+        conversion = utils.swe_to_in(units)
 
         if nearest:
             precip = conversion * ds.tp.sel(
@@ -565,7 +77,7 @@ class Ensemble:
             extent = regions.Extent(
                 top=top_lat, bottom=bottom_lat, left=left_lon, right=right_lon
             )
-            grid_prism_ds = set_ds_extent(self.downscale_ds, extent)
+            grid_prism_ds = utils.set_ds_extent(self.downscale_ds, extent)
             grid_mean = grid_prism_ds.prism.mean()
             point = self.downscale_ds.prism.interp(latitude=lat, longitude=lon)
             ratio = point / grid_mean
@@ -606,7 +118,7 @@ class Ensemble:
         step_size = self.loader.step_size
         assert fhour % step_size == 0, "forecast hour must be divisible by 6"
 
-        conversion = swe_to_in(self.ds.tp.units)
+        conversion = utils.swe_to_in(self.ds.tp.units)
         step = int(fhour / step_size)
         if not self._forecast_starts_at_init:
             step -= 1
@@ -733,7 +245,7 @@ def plume_plot(
     """
 
     times_ticks = times[::2]
-    times_labels = [xtick_formatter(parse_np_datetime64(t)) for t in times_ticks]
+    times_labels = [xtick_formatter(utils.parse_np_datetime64(t)) for t in times_ticks]
     axs[0].set_xticks(times_ticks, labels=times_labels)
     axs[1].set_xticks(np.arange(1, len(times) + 1, 2), labels=times_labels)
 
@@ -848,7 +360,7 @@ def plume_plot_snow(
 
     # Set xaxis labels
     times_ticks = times[::2]
-    times_labels = [xtick_formatter(parse_np_datetime64(t)) for t in times_ticks]
+    times_labels = [xtick_formatter(utils.parse_np_datetime64(t)) for t in times_ticks]
     axs[0, 0].set_xticks(times_ticks, labels=times_labels)
     axs[1, 0].set_xticks(times_ticks, labels=times_labels)
 
