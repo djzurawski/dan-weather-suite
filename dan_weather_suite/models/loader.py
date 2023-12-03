@@ -43,9 +43,9 @@ class ModelLoader(ABC):
                 # delete netcdf later to preserve website uptime
                 os.remove(self.grib_file)
 
-            if os.path.exists(self.grib_file):
+            if os.path.exists(self.netcdf_file):
                 # delete netcdf later to preserve website uptime
-                os.remove(self.grib_file)
+                os.remove(self.netcdf_file)
 
         if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
             logging.info(f"Downloading grib {cycle}")

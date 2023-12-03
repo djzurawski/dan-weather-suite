@@ -17,7 +17,7 @@ def parse_np_datetime64(t: np.datetime64) -> datetime:
     return isoparse(str(t)).replace(tzinfo=timezone.utc)
 
 
-def round_to_nearest(x: float, options: Iterable[float] = [0.25, 0.4, 0.5]) -> float:
+def round_to_nearest(x: float, options: Iterable[float] = (0.25, 0.4, 0.5)) -> float:
     "Rounds x to the nearest value in 'options'"
     assert options, "options cannot be empty"
 
@@ -74,7 +74,7 @@ def download_bytes(url: str, params: dict = {}) -> bytes:
             result = resp.content
             return result
         else:
-            error_str = logging.error(
+            error_str = (
                 f"Error downloading {url} status:{resp.status_code}, {resp.text}"
             )
             raise requests.exceptions.RequestException(error_str)
@@ -84,7 +84,7 @@ def download_bytes(url: str, params: dict = {}) -> bytes:
         return None
 
 
-def download_and_combine_gribs(urls: list[Tuple[str, dict]], threads=1) -> bytes:
+def download_and_combine_gribs(urls: list[Tuple[str, dict]], threads=2) -> bytes:
     with ThreadPoolExecutor(threads) as executor:
         results = list(executor.map(lambda x: download_bytes(*x), urls))
         concatenated_bytes = b"".join(
