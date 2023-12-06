@@ -14,13 +14,16 @@ from dateutil import parser
 from datetime import datetime
 import os
 
-from dan_weather_suite.plotting.regions import WEST_CONUS_EXTENT
+import dan_weather_suite.plotting.regions as regions
+from dan_weather_suite.plotting.regions import Region, WEST_CONUS_EXTENT
 import traceback
 
 # GRAVITY = 9.81 * (units.m / units.s**2)
 CO_NC_DIR = "/home/dan/uems/runs/colorado5km/wrfprd"
 
 IN_PER_MM = 0.03937008
+
+D1_REGIONS = [regions.WASATCH]
 
 
 def datetime64_to_datetime(dt: np.datetime64) -> datetime:
@@ -164,7 +167,7 @@ def interp_to_prism(ds, ratio):
     return data_at_prism_points
 
 
-def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
+def accumulated_precip_plot(ds, domain_name, output_dir):
     precip = ds.RAINNC[0] * IN_PER_MM
     lats = ds.PB.XLAT[0]
     lons = ds.PB.XLONG[0]
@@ -197,14 +200,29 @@ def accumulated_precip_plot(ds, domain_name, output_dir, extent=None):
                 WEST_CONUS_EXTENT.top,
             ]
         )
-
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.precip.f{fhour_str}.png"
     print("saving", fname)
     fig.savefig(fname, bbox_inches="tight")
+
+    if "d01" in domain_name:
+        for region in D1_REGIONS:
+            ax.set_extent(
+                [
+                    region.extent.left,
+                    region.extent.right,
+                    region.extent.bottom,
+                    region.extent.top,
+                ]
+            )
+            fname = (
+                f"{output_dir}/danwrf.{cycle}z.{region.name}.precip.f{fhour_str}.png"
+            )
+            print("saving", fname)
+            fig.savefig(fname, bbox_inches="tight")
     plt.close(fig)
 
 
-def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
+def accumulated_swe_plot(ds, domain_name, output_dir):
     swe = ds.SNOWNC[0] * IN_PER_MM
     lats = ds.PB.XLAT[0]
     lons = ds.PB.XLONG[0]
@@ -241,6 +259,23 @@ def accumulated_swe_plot(ds, domain_name, output_dir, extent=None):
     fname = f"{output_dir}/danwrf.{cycle}z.{domain_name}.swe.f{fhour_str}.png"
     print("saving", fname)
     fig.savefig(fname, bbox_inches="tight")
+
+    if "d01" in domain_name:
+        for region in D1_REGIONS:
+            ax.set_extent(
+                [
+                    region.extent.left,
+                    region.extent.right,
+                    region.extent.bottom,
+                    region.extent.top,
+                ]
+            )
+            fname = (
+                f"{output_dir}/danwrf.{cycle}z.{region.name}.precip.f{fhour_str}.png"
+            )
+            print("saving", fname)
+            fig.savefig(fname, bbox_inches="tight")
+
     plt.close(fig)
 
 
