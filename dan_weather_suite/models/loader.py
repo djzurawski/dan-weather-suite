@@ -61,7 +61,7 @@ class ModelLoader(ABC):
                     logging.info("Saving to NETCDF")
                     if force and os.path.exists(self.netcdf_file):
                         os.remove(self.netcdf_file)
-                    ds.to_netcdf(self.netcdf_file, mode="a")
+                    ds.to_netcdf(self.netcdf_file)
                     logging.info("Up to date")
                     return True
                 except Exception as e:
