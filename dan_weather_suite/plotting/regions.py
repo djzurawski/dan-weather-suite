@@ -80,7 +80,7 @@ JACKSON_HOLE_R = Label(text="Jackson Hole Rendezvous Bowl", lat=43.59, lon=-110.
 JACKSON_HOLE = Label(text="Jackson Hole Mid Mtn", lat=43.598, lon=-110.840)
 
 
-FRONT_RANGE_EXTENT = Extent(top=40.9, bottom=38.25, left=-107.9, right=-104.6)
+FRONT_RANGE_EXTENT = Extent(top=41.4, bottom=37.75, left=-108.4, right=-104.1)
 
 FRONT_RANGE_LABELS = [ABASIN, BOULDER, COPPER, ELDORA, STEAMBOAT, VAIL, WINTER_PARK]
 
@@ -92,12 +92,13 @@ FRONT_RANGE = Region(
     display_counties=True,
 )
 
-
-WASATCH_EXTENT = Extent(top=41.5, bottom=40, left=-112.5, right=-111.0)
+COLORADO_EXTENT = Extent(top=42, bottom=36, left=-109.5, right=-101.5)
+WASATCH_EXTENT = Extent(top=42.0, bottom=39.5, left=-113.0, right=-110.5)
 
 WASATCH_LABELS = [POWDER_MOUNTAIN, SNOWBASIN, ALTA_SNOWBIRD, PARK_CITY]
 
 
+COLORADO = Region(name="colorado", extent=COLORADO_EXTENT, display_counties=True)
 WASATCH = Region(
     name="wasatch", extent=WASATCH_EXTENT, labels=WASATCH_LABELS, display_counties=True
 )

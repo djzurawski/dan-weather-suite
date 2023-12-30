@@ -1,10 +1,12 @@
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
+import dan_weather_suite.plotting.regions as regions
 from datetime import datetime, timezone
 from dateutil.parser import isoparse
-import numpy as np
-import dan_weather_suite.plotting.regions as regions
 import logging
+import numpy as np
+from scipy.interpolate import griddata
+from scipy.spatial import KDTree
 import requests
 from typing import Tuple
 import xarray as xr
@@ -13,8 +15,21 @@ import xarray as xr
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 
 
+def midpoints(x: np.ndarray) -> np.ndarray:
+    "Returs midpoints of array"
+    return (x[1:] + x[:-1]) / 2
+
+
 def parse_np_datetime64(t: np.datetime64) -> datetime:
     return isoparse(str(t)).replace(tzinfo=timezone.utc)
+
+
+def np_timedelta64_to_hour(td: np.timedelta64) -> float:
+    h = td.astype('timedelta64[ns]') / (3600 * 10**9)
+    return h.astype(float)
+
+def intepolate_to_fhour(fhours_interp, fhours, values):
+    return np.interp(fhours_interp, fhours, values)
 
 
 def round_to_nearest(x: float, options: Iterable[float] = (0.25, 0.4, 0.5)) -> float:
@@ -91,3 +106,45 @@ def download_and_combine_gribs(urls: list[Tuple[str, dict]], threads=2) -> bytes
             result for result in results if result is not None
         )
         return concatenated_bytes
+
+
+def nearest_neighbor_forecast(
+    ds: xr.Dataset, tree: KDTree, lon: float, lat: float
+) -> xr.Dataset:
+    k_nearest = 9
+    pairs = np.dstack((ds.longitude, ds.latitude)).reshape(-1, 2)
+    distances, indicies = tree.query([lon, lat], k_nearest)
+    nearest_points = pairs[indicies]
+
+    # (haversine dist, coord array indices)
+    nearest_points_idx = [
+        (haversine(lat, lon, nbm_lat, nbm_lon), idx)
+        for (nbm_lon, nbm_lat), idx in zip(nearest_points, indicies)
+    ]
+
+    nearest_point_km, nearest_idx = min(nearest_points_idx, key=lambda x: x[0])
+    logging.info(f"Nearest: {pairs[nearest_idx]} {round(nearest_point_km,2)}km")
+
+    nearest_row, nearest_col = divmod(nearest_idx, ds.latitude.shape[1])
+    return ds.sel(x=nearest_col, y=nearest_row)
+
+
+def interp_forecast(
+    da: xr.DataArray, tree: KDTree, lon: float, lat: float
+) -> np.ndarray:
+    "Only works on variable DataArray,"
+    k_nearest = 9
+    distances, indicies = tree.query([lon, lat], k_nearest)
+
+    nearest_coords = [divmod(idx, da.latitude.shape[1]) for idx in indicies]
+    lats = [da.sel(y=y, x=x).latitude.values for y, x in nearest_coords]
+    lons = [da.sel(y=y, x=x).longitude.values for y, x in nearest_coords]
+    data_points = [(lon, lat) for lon, lat in zip(lons, lats)]
+
+    forecast = []
+    for step in da.step:
+        values = [da.sel(y=y, x=x, step=step).values for y, x in nearest_coords]
+        interped = griddata(data_points, values, [(lon, lat)], method="linear")
+
+        forecast.append(interped[0])
+    return np.array(forecast)

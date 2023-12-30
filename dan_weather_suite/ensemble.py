@@ -291,7 +291,7 @@ def plume_plot_snow(
         ensembles = [Ensemble(*LOADERS[model]) for model in models]
 
     nbm = NbmLoader()
-    slr = nbm.forecast_slr(lon, lat)
+    slr_ds = nbm.forecast_slr(lon, lat)
 
     fig, axs = plt.subplots(2, 2, figsize=(16, 10), sharey="row")
     fig.suptitle(f"{title} lat: {lat} lon: {lon}")
@@ -306,11 +306,14 @@ def plume_plot_snow(
             lon, lat, downscale=downscale, nearest=nearest
         )
 
+        # no t0 in nbm
+        slr_steps = [t - times[0] for t in times[1:]]
+        slr = slr_ds.interp(step=slr_steps).values
+
         snow_plumes = np.zeros(plumes.shape)
         precip_rate = np.diff(plumes, axis=1)
-        snow_rate = precip_rate * slr.values
+        snow_rate = precip_rate * slr
         snow_plumes[:, 1:] = np.cumsum(snow_rate, axis=1)
-
         for plume, snow_plume in zip(plumes, snow_plumes):
             axs[0, 0].plot(
                 times, plume, color=ensemble.plume_color, alpha=0.3, linewidth=1
