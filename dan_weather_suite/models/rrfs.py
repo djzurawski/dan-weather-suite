@@ -6,8 +6,12 @@ from dan_weather_suite.models.loader import ModelLoader
 import dan_weather_suite.plotting.regions as regions
 import dan_weather_suite.utils as utils
 from datetime import datetime, time, timedelta
+import numpy as np
 import os
 import pandas as pd
+import pickle
+
+from scipy.spatial import KDTree
 import xarray as xr
 
 S3_BUCKET = "noaa-rrfs-pds"
@@ -70,7 +74,7 @@ def extract_acc_precip_byte_range(df: pd.DataFrame, fhour: int) -> str:
     return f"{start_byte}-{end_byte}"
 
 
-def download_member_grib(init_dt: datetime, member: int, flength: int = 60):
+def download_member_grib(init_dt: datetime, member: int, flength: int = 48):
     grib_file = f"grib/rrfs-mem{member}.grib"
     s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
 
@@ -100,6 +104,7 @@ class RrfsLoader(ModelLoader):
         )
         self.grib_file = "grib/rrfs.grib"
         self.netcdf_file = "grib/rrfs.nc"
+        self.kd_tree = "rrfs-tree.pkl"
         self.bucket = S3_BUCKET
         self.num_members = 6
 
@@ -152,3 +157,22 @@ class RrfsLoader(ModelLoader):
         ds = self.combine_members()
         ds["longitude"] = (ds["longitude"] + 180) % 360 - 180
         return ds
+
+    def create_kdtree(self) -> KDTree:
+        "Create KD tree of ds coordinates"
+        ds = self.open_dataset()
+        pairs = np.dstack((ds.longitude, ds.latitude)).reshape(-1, 2)
+        tree = KDTree(pairs)
+        with open(self.kd_tree, "wb") as f:
+            pickle.dump(tree, f)
+
+        return tree
+
+    def get_kdtree(self) -> KDTree:
+        "Create KD tree of ds coordinates"
+        if not os.path.exists(self.kd_tree):
+            tree = self.create_kdtree()
+        else:
+            with open(self.kd_tree, "rb") as f:
+                tree = pickle.load(f)
+        return tree

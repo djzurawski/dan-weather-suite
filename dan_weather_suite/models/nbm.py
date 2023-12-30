@@ -16,15 +16,24 @@ logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 
 
 class NbmLoader(ModelLoader):
-    def __init__(self):
+    def __init__(self, short_term=False):
         super().__init__()
 
         self.hourly = list(range(1, 36 + 1, 1))
         self.six_hourly = list(range(42, 240 + 6, 6))
         self.forecast_hours = self.hourly + self.six_hourly
+        self.short_term_length = 60
 
-        self.grib_file = "grib/nbm.grib"
-        self.netcdf_file = "grib/nbm.nc"
+        if short_term:
+            self.forecast_hours = [
+                t for t in self.forecast_hours if t <= self.short_term_length
+            ]
+            self.grib_file = "grib/nbm-short.grib"
+            self.netcdf_file = "grib/nbm-short.nc"
+
+        else:
+            self.grib_file = "grib/nbm.grib"
+            self.netcdf_file = "grib/nbm.nc"
 
     def get_latest_init(self) -> datetime:
         current_utc = datetime.utcnow()
