@@ -8,6 +8,7 @@ from dan_weather_suite.models.nbm import NbmLoader
 from dan_weather_suite.models.rrfs import RrfsLoader
 from datetime import datetime
 import dan_weather_suite.utils as utils
+import io
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -23,7 +24,7 @@ def xtick_formatter(dt: datetime):
         return ""
 
 
-def plume_plot(lon: float, lat: float, title=""):
+def plume_plot(lon: float, lat: float, title="", return_bytes=False):
     LOADERS = {
         "ARW": HireswArwLoader(),
         "ARW2": HireswArw2Loader(),
@@ -150,6 +151,12 @@ def plume_plot(lon: float, lat: float, title=""):
     axs[0, 1].set_ylabel("Precip (in)")
     axs[1, 0].set_ylabel("Snow (in)")
     axs[1, 1].set_ylabel("Snow (in)")
+
+    if return_bytes:
+        with io.BytesIO() as bio:
+            plt.savefig(bio, format="jpg", bbox_inches="tight")
+            plt.close(fig)
+            return bio.getvalue()
 
     plt.show()
 

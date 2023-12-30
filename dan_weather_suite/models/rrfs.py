@@ -3,8 +3,6 @@ from botocore import UNSIGNED
 from botocore.config import Config
 from concurrent.futures import ThreadPoolExecutor
 from dan_weather_suite.models.loader import ModelLoader
-import dan_weather_suite.plotting.regions as regions
-import dan_weather_suite.utils as utils
 from datetime import datetime, time, timedelta
 import numpy as np
 import os
