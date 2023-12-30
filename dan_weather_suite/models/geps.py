@@ -1,4 +1,4 @@
-from dan_weather_suite.models import ModelLoader
+from dan_weather_suite.models.loader import ModelLoader
 import dan_weather_suite.utils as utils
 from datetime import datetime, time, timedelta
 from typing import Tuple

@@ -1,4 +1,4 @@
-from dan_weather_suite.models import ModelLoader
+from dan_weather_suite.models.loader import ModelLoader
 from datetime import datetime, time
 from dateutil.parser import isoparse
 from ecmwf.opendata import Client
