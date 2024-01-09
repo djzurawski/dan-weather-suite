@@ -72,7 +72,7 @@ def extract_acc_precip_byte_range(df: pd.DataFrame, fhour: int) -> str:
     return f"{start_byte}-{end_byte}"
 
 
-def download_member_grib(init_dt: datetime, member: int, flength: int = 6) -> str:
+def download_member_grib(init_dt: datetime, member: int, flength: int = 48) -> str:
     grib_file = f"grib/rrfs-mem{member}.grib"
     s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
 
