@@ -72,7 +72,7 @@ def extract_acc_precip_byte_range(df: pd.DataFrame, fhour: int) -> str:
     return f"{start_byte}-{end_byte}"
 
 
-def download_member_grib(init_dt: datetime, member: int, flength: int = 48):
+def download_member_grib(init_dt: datetime, member: int, flength: int = 6) -> str:
     grib_file = f"grib/rrfs-mem{member}.grib"
     s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
 
@@ -135,7 +135,14 @@ class RrfsLoader(ModelLoader):
                 future = pool.submit(download_member_grib, init_dt, member)
                 futures.append(future)
 
-            print([f.result() for f in futures])
+            for i, f in enumerate(futures):
+                try:
+                    print(f.result())
+                except Exception as e:
+                    print(f"RRFS download error {e}")
+                    grib_file = f"grib/rrfs-mem{i}.grib"
+                    if os.path.exists(grib_file):
+                        os.remove(grib_file)
 
     def load_member_grib(self, member: int) -> xr.Dataset:
         grib_file = f"grib/rrfs-mem{member}.grib"
@@ -143,7 +150,12 @@ class RrfsLoader(ModelLoader):
 
     def combine_members(self) -> xr.Dataset:
         members = range(self.num_members)
-        datasets = [self.load_member_grib(member) for member in members]
+        datasets = []
+        for i in members:
+            try:
+                datasets.append(self.load_member_grib(i))
+            except Exception as e:
+                print(f"Count not combine member {i}: {e}")
 
         for i, ds in enumerate(datasets):
             datasets[i] = ds.expand_dims({"number": [i]})

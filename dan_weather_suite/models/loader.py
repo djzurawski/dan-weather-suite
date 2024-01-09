@@ -28,7 +28,7 @@ class ModelLoader(ABC):
         Checks if grib on disk is latest forecast
         """
 
-        ds = xr.open_dataset(self.netcdf_file)
+        ds = xr.open_dataset(self.netcdf_file, chunks={})
         forecast_init = isoparse(str(ds.time.values))
         latest_init = self.get_latest_init()
         if cycle is not None:
@@ -50,7 +50,7 @@ class ModelLoader(ABC):
         if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
             logging.info(f"Downloading grib {cycle}")
             self.download_grib(cycle)
-            logging.info("Processed grib")
+            logging.info("Processing grib")
             ds = self.process_grib()
             logging.info("Setting CONUS extent")
             extent = regions.PRISM_EXTENT
