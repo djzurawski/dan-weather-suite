@@ -46,10 +46,12 @@ TAOS = Label(text="Taos Ski Valley", lat=36.573, lon=-105.448)
 
 # Colorado
 ABASIN = Label(text="Abasin", lat=39.635, lon=-105.871)
+ASPEN = Label(text="Aspen-Snowmass", lat=39.175, lon=-106.959)
 BERTHOUD_PASS = Label(text="Berthoud Pass", lat=39.781, lon=-105.777)
 BOULDER = Label(text="Boulder", lat=40.01, lon=-105.27)
 BRECKENRIDGE = Label(text="Breckenridge", lat=39.478, lon=-106.077)
 COPPER = Label(text="Copper", lat=39.485, lon=-106.16)
+CRESTED_BUTTE = Label(text="Crested Butte", lat=38.888, lon=-106.943)
 ELDORA = Label(text="Eldora", lat=39.94, lon=-105.596)
 KEYSTONE = Label(text="Keystone", lat=39.58, lon=-105.94)
 LOVELAND = Label(text="Loveland", lat=39.673, lon=-105.908)
@@ -73,6 +75,8 @@ SNOWBASIN = Label(text="Snowbasin", lat=41.2, lon=-111.863)
 
 # Montana
 BIG_SKY = Label(text="Big Sky", lat=45.27, lon=-111.45)
+
+MAMMOTH = Label(text="Mammoth", lat=37.636, lon=-119.028)
 
 # Wyoming
 GRAND_TARGHEE = Label(text="Grand Targhee", lat=43.787, lon=-110.936)
@@ -120,6 +124,9 @@ PRISM_EXTENT = Extent(
 
 DANSEMBLE_SELECT = sorted(
     [
+        MAMMOTH,
+        ASPEN,
+        CRESTED_BUTTE,
         SANDIA_PEAK,
         SKI_SANTA_FE,
         TAOS,
