@@ -55,7 +55,10 @@ CRESTED_BUTTE = Label(text="Crested Butte", lat=38.888, lon=-106.943)
 ELDORA = Label(text="Eldora", lat=39.94, lon=-105.596)
 KEYSTONE = Label(text="Keystone", lat=39.58, lon=-105.94)
 LOVELAND = Label(text="Loveland", lat=39.673, lon=-105.908)
+PURGATORY = Label(text="Purgatory", lat=37.623, lon=-107.838)
 STEAMBOAT = Label(text="Steamboat", lat=40.46, lon=-106.76)
+SILVERTON = Label(text="Silverton", lat=37.877, lon=-107.653)
+TELLURIDE = Label(text="Telluride", lat=37.911, lon=--107.822)
 WINTER_PARK = Label(text="Winter Park", lat=39.858, lon=-105.773)
 WOLF_CREEK = Label(text="Wolf Creek", lat=37.47, lon=-106.80)
 VAIL = Label(text="Vail", lat=39.61, lon=-106.375)
@@ -124,6 +127,9 @@ PRISM_EXTENT = Extent(
 
 DANSEMBLE_SELECT = sorted(
     [
+        PURGATORY,
+        TELLURIDE,
+        SILVERTON,
         MAMMOTH,
         ASPEN,
         CRESTED_BUTTE,
