@@ -374,8 +374,8 @@ def plume_plot_snow(
     day_7 = int(168 / 6)
     axs[0, 0].axvline(times[day_7], color="gray", linestyle="--")
     axs[1, 0].axvline(times[day_7], color="gray", linestyle="--")
-    axs[0, 1].axvline(day_7, color="gray", linestyle="--")
-    axs[1, 1].axvline(day_7, color="gray", linestyle="--")
+    axs[0, 1].axvline(day_7 + 1, color="gray", linestyle="--")
+    axs[1, 1].axvline(day_7 + 1, color="gray", linestyle="--")
 
     # turn second y axis labels on
     axs[0, 1].yaxis.set_tick_params(labelleft=True)
