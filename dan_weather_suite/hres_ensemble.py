@@ -169,6 +169,12 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
     ax_slr.legend()
     ax_slr.set_ylabel("Snow:Liquid Ratio")
 
+    # Grid dotted lines
+    axs[0, 0].grid(axis="both", linestyle="--")
+    axs[1, 0].grid(axis="both", linestyle="--")
+    axs[0, 1].grid(axis="both", linestyle="--")
+    axs[1, 1].grid(axis="both", linestyle="--")
+
     # Subplot titles
     axs[0, 0].title.set_text("Accumulated Precipitation")
     axs[0, 1].title.set_text("Accumulated Snow")
