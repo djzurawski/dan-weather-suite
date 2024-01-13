@@ -172,7 +172,7 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
     # Subplot titles
     axs[0, 0].title.set_text("Accumulated Precipitation")
     axs[0, 1].title.set_text("Accumulated Snow")
-    axs[1, 0].title.set_text("Hourly Snow")
+    axs[1, 0].title.set_text("Hourly Precip")
     axs[1, 1].title.set_text("Hourly Snow")
 
     # Subplot ylabels
