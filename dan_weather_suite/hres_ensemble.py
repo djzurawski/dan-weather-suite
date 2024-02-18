@@ -44,7 +44,8 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
 
         precip_in = conversion * precip_raw.values
 
-        slr = slr_ds.interp(step=point_forecast.step).values[:-1]
+        slr_da = slr_ds.interp(step=point_forecast.step)
+        slr = slr_da.values[:-1]
 
         snow = np.zeros(precip_in.shape)
         precip_rate = np.diff(precip_in)
