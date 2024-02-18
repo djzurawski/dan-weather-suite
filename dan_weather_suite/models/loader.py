@@ -88,7 +88,7 @@ class ModelLoader(ABC):
             self.grib_file, filter_by_keys={"dataType": "cf"}, chunks={}
         )
         ds_p = xr.open_dataset(
-            self.grib_file, filter_by_keys={"dataType": "pf"}, chunks={}
+            self.grib_file, filter_by_keys={"dataType": "pf"}, chunks={"number": 1}
         )
 
         # add on the control member to the perturbed
