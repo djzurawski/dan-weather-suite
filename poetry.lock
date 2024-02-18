@@ -837,12 +837,17 @@ version = "0.2.0"
 description = "A package to download ECMWF open data"
 optional = false
 python-versions = "*"
-files = [
-    {file = "ecmwf-opendata-0.2.0.tar.gz", hash = "sha256:628891bd72af645616c257ca02d79e8a22baa12f49865d78d23b6459ce0ab056"},
-]
+files = []
+develop = false
 
 [package.dependencies]
 multiurl = ">=0.2.1"
+
+[package.source]
+type = "git"
+url = "https://github.com/djzurawski/ecmwf-opendata.git"
+reference = "HEAD"
+resolved_reference = "cd6d184fbefbca7aa3bbf846aadb1e68336205be"
 
 [[package]]
 name = "ecmwflibs"
@@ -3125,4 +3130,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.11"
-content-hash = "99aecea9bc91929c1e2bd57d69f8e6144f043aee48a3e3a03566c2c9f4e0c65d"
+content-hash = "a4ae58f586b198d1ac6a5a57ff45eb2e626296971cd565989946c80204cf1361"

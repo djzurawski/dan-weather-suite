@@ -170,16 +170,16 @@ def download_all_forecasts(cycle=None, force=False):
         return ensemble_res + [nbm_res]
 
 
-def plot_compare(ens: Ensemble):
-    lon, lat, swe = ens.swe_at_fhour(84, downscale=True, ratio=True)
+def plot_compare(ens: Ensemble, fhour=84):
+    lon, lat, swe = ens.swe_at_fhour(fhour, downscale=True, ratio=True)
     plot.plot_swe(lon, lat, swe, pcolormesh=True)
     plt.title("Downscaled")
 
-    lon, lat, swe = ens.swe_at_fhour(84, downscale=True, ratio=False)
+    lon, lat, swe = ens.swe_at_fhour(fhour, downscale=True, ratio=False)
     plot.plot_swe(lon, lat, swe, pcolormesh=True)
     plt.title("Interpolated")
 
-    lon, lat, swe = ens.swe_at_fhour(84, downscale=False, ratio=False)
+    lon, lat, swe = ens.swe_at_fhour(fhour, downscale=False, ratio=False)
     plot.plot_swe(lon, lat, swe, pcolormesh=True)
     plt.title("Native")
     # plt.show()

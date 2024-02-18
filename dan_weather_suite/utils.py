@@ -1,6 +1,7 @@
 from collections.abc import Iterable
 from concurrent.futures import ThreadPoolExecutor
 import dan_weather_suite.plotting.regions as regions
+import dask
 from datetime import datetime, timezone
 from dateutil.parser import isoparse
 import logging
@@ -71,14 +72,16 @@ def swe_to_in(units: str) -> float:
 
 
 def set_ds_extent(ds: xr.Dataset, extent: regions.Extent) -> xr.Dataset:
-    left = extent.left
-    right = extent.right
-    top = extent.top
-    bottom = extent.bottom
-    x_condition = (ds.longitude >= left) & (ds.longitude <= right)
-    y_condition = (ds.latitude >= bottom) & (ds.latitude <= top)
-    trimmed = ds.where(x_condition & y_condition, drop=True)
-    return trimmed
+    # prevent slicing from creating large chunk and causing huge memory usage
+    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+        left = extent.left
+        right = extent.right
+        top = extent.top
+        bottom = extent.bottom
+        x_condition = (ds.longitude >= left) & (ds.longitude <= right)
+        y_condition = (ds.latitude >= bottom) & (ds.latitude <= top)
+        trimmed = ds.where(x_condition & y_condition, drop=True)
+        return trimmed
 
 
 def download_bytes(url: str, params: dict = {}) -> bytes:
