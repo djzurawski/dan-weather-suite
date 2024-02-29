@@ -301,108 +301,118 @@ def plume_plot_snow(
 
     all_precip = []
     all_snow = []
-    for ensemble in ensembles:
-        times, plumes = ensemble.point_plumes(
-            lon, lat, downscale=downscale, nearest=nearest
-        )
+    try:
+        for ensemble in ensembles:
+            times, plumes = ensemble.point_plumes(
+                lon, lat, downscale=downscale, nearest=nearest
+            )
 
-        # no t0 in nbm
-        slr_steps = [t - times[0] for t in times[1:]]
-        slr = slr_ds.interp(step=slr_steps).values
+            # no t0 in nbm
+            slr_steps = [t - times[0] for t in times[1:]]
+            slr = slr_ds.interp(step=slr_steps).values
 
-        snow_plumes = np.zeros(plumes.shape)
-        precip_rate = np.diff(plumes, axis=1)
-        snow_rate = precip_rate * slr
-        snow_plumes[:, 1:] = np.cumsum(snow_rate, axis=1)
-        for plume, snow_plume in zip(plumes, snow_plumes):
+            snow_plumes = np.zeros(plumes.shape)
+            precip_rate = np.diff(plumes, axis=1)
+            snow_rate = precip_rate * slr
+            snow_plumes[:, 1:] = np.cumsum(snow_rate, axis=1)
+            for plume, snow_plume in zip(plumes, snow_plumes):
+                axs[0, 0].plot(
+                    times, plume, color=ensemble.plume_color, alpha=0.3, linewidth=1
+                )
+
+                axs[1, 0].plot(
+                    times,
+                    snow_plume,
+                    color=ensemble.plume_color,
+                    alpha=0.3,
+                    linewidth=1,
+                )
+                all_precip.append(plume)
+                all_snow.append(snow_plume)
+
+            precip_mean = np.mean(plumes, axis=0)
+            snow_mean = np.mean(snow_plumes, axis=0)
             axs[0, 0].plot(
-                times, plume, color=ensemble.plume_color, alpha=0.3, linewidth=1
+                times,
+                precip_mean,
+                color=ensemble.plume_color,
+                linewidth=3,
+                zorder=200,
+                label=ensemble.name,
             )
-
             axs[1, 0].plot(
-                times, snow_plume, color=ensemble.plume_color, alpha=0.3, linewidth=1
+                times,
+                snow_mean,
+                color=ensemble.plume_color,
+                linewidth=3,
+                zorder=200,
+                label=ensemble.name,
             )
-            all_precip.append(plume)
-            all_snow.append(snow_plume)
 
-        precip_mean = np.mean(plumes, axis=0)
-        snow_mean = np.mean(snow_plumes, axis=0)
-        axs[0, 0].plot(
-            times,
-            precip_mean,
-            color=ensemble.plume_color,
-            linewidth=3,
-            zorder=200,
-            label=ensemble.name,
-        )
-        axs[1, 0].plot(
-            times,
-            snow_mean,
-            color=ensemble.plume_color,
-            linewidth=3,
-            zorder=200,
-            label=ensemble.name,
-        )
+        axs[0, 0].legend()
+        axs[1, 0].legend()
 
-    axs[0, 0].legend()
-    axs[1, 0].legend()
+        # Boxplots
+        precip_boxplot_data = np.array(all_precip)
+        snow_boxplot_data = np.array(all_snow)
+        axs[0, 1].boxplot(precip_boxplot_data, showfliers=False, whis=(10, 90))
+        axs[1, 1].boxplot(snow_boxplot_data, showfliers=False, whis=(10, 90))
 
-    # Boxplots
-    precip_boxplot_data = np.array(all_precip)
-    snow_boxplot_data = np.array(all_snow)
-    axs[0, 1].boxplot(precip_boxplot_data, showfliers=False, whis=(10, 90))
-    axs[1, 1].boxplot(snow_boxplot_data, showfliers=False, whis=(10, 90))
+        # SLR Line
+        ax_slr = axs[1, 1].twinx()
+        slr_x = np.arange(2, len(slr) + 2)
+        ax_slr.plot(slr_x, slr, color="gray", label="Snow Liquid Ratio")
+        ax_slr.set_ylim((0, 30))
+        ax_slr.legend()
+        ax_slr.set_ylabel("Snow:Liquid Ratio")
 
-    # SLR Line
-    ax_slr = axs[1, 1].twinx()
-    slr_x = np.arange(2, len(slr) + 2)
-    ax_slr.plot(slr_x, slr, color="gray", label="Snow Liquid Ratio")
-    ax_slr.set_ylim((0, 30))
-    ax_slr.legend()
-    ax_slr.set_ylabel("Snow:Liquid Ratio")
+        # Set xaxis labels
+        times_ticks = times[::2]
+        times_labels = [
+            xtick_formatter(utils.parse_np_datetime64(t)) for t in times_ticks
+        ]
+        axs[0, 0].set_xticks(times_ticks, labels=times_labels)
+        axs[1, 0].set_xticks(times_ticks, labels=times_labels)
 
-    # Set xaxis labels
-    times_ticks = times[::2]
-    times_labels = [xtick_formatter(utils.parse_np_datetime64(t)) for t in times_ticks]
-    axs[0, 0].set_xticks(times_ticks, labels=times_labels)
-    axs[1, 0].set_xticks(times_ticks, labels=times_labels)
+        axs[0, 1].set_xticks(np.arange(1, len(times) + 1, 2), labels=times_labels)
+        axs[1, 1].set_xticks(np.arange(1, len(times) + 1, 2), labels=times_labels)
 
-    axs[0, 1].set_xticks(np.arange(1, len(times) + 1, 2), labels=times_labels)
-    axs[1, 1].set_xticks(np.arange(1, len(times) + 1, 2), labels=times_labels)
+        # vertical line at day 7
+        day_7 = int(168 / 6)
+        axs[0, 0].axvline(times[day_7], color="gray", linestyle="--")
+        axs[1, 0].axvline(times[day_7], color="gray", linestyle="--")
+        axs[0, 1].axvline(day_7 + 1, color="gray", linestyle="--")
+        axs[1, 1].axvline(day_7 + 1, color="gray", linestyle="--")
 
-    # vertical line at day 7
-    day_7 = int(168 / 6)
-    axs[0, 0].axvline(times[day_7], color="gray", linestyle="--")
-    axs[1, 0].axvline(times[day_7], color="gray", linestyle="--")
-    axs[0, 1].axvline(day_7 + 1, color="gray", linestyle="--")
-    axs[1, 1].axvline(day_7 + 1, color="gray", linestyle="--")
+        # turn second y axis labels on
+        axs[0, 1].yaxis.set_tick_params(labelleft=True)
+        axs[1, 1].yaxis.set_tick_params(labelleft=True)
 
-    # turn second y axis labels on
-    axs[0, 1].yaxis.set_tick_params(labelleft=True)
-    axs[1, 1].yaxis.set_tick_params(labelleft=True)
+        # Grid dotted lines
+        axs[0, 0].grid(axis="both", linestyle="--")
+        axs[1, 0].grid(axis="both", linestyle="--")
+        axs[0, 1].grid(axis="both", linestyle="--")
+        axs[1, 1].grid(axis="both", linestyle="--")
 
-    # Grid dotted lines
-    axs[0, 0].grid(axis="both", linestyle="--")
-    axs[1, 0].grid(axis="both", linestyle="--")
-    axs[0, 1].grid(axis="both", linestyle="--")
-    axs[1, 1].grid(axis="both", linestyle="--")
+        # Subplot titles
+        axs[0, 0].title.set_text("Accumulated Precipitation")
+        axs[0, 1].title.set_text("Accumulated Precipitation")
+        axs[1, 0].title.set_text("Accumulated Snow")
+        axs[1, 1].title.set_text("Accumulated Snow")
 
-    # Subplot titles
-    axs[0, 0].title.set_text("Accumulated Precipitation")
-    axs[0, 1].title.set_text("Accumulated Precipitation")
-    axs[1, 0].title.set_text("Accumulated Snow")
-    axs[1, 1].title.set_text("Accumulated Snow")
+        # Subplot ylabels
+        axs[0, 0].set_ylabel("Precip (in)")
+        axs[0, 1].set_ylabel("Precip (in)")
+        axs[1, 0].set_ylabel("Snow (in)")
+        axs[1, 1].set_ylabel("Snow (in)")
 
-    # Subplot ylabels
-    axs[0, 0].set_ylabel("Precip (in)")
-    axs[0, 1].set_ylabel("Precip (in)")
-    axs[1, 0].set_ylabel("Snow (in)")
-    axs[1, 1].set_ylabel("Snow (in)")
+        if return_bytes:
+            with io.BytesIO() as bio:
+                plt.savefig(bio, format="jpg", bbox_inches="tight")
+                plt.close(fig)
+                return bio.getvalue()
 
-    if return_bytes:
-        with io.BytesIO() as bio:
-            plt.savefig(bio, format="jpg", bbox_inches="tight")
-            plt.close(fig)
-            return bio.getvalue()
+    except Exception as e:
+        logger.error(str(e))
 
     plt.show()
