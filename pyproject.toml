@@ -20,16 +20,15 @@ netcdf4 = "^1.6.4"
 metpy = "^1.5.1"
 ecmwflibs = "0.5.3"
 pygrib = "^2.1.4"
+rioxarray = "^0.15.0"
+ecmwf-opendata = { git = "https://github.com/ecmwf/ecmwf-opendata.git", rev="7cc73beb0d04c22838b797b03c96cc47c7b423ee"}
+boto3 = "^1.33.10"
+s3fs = "^2023.12.2"
+
+[tool.poetry.group.ai.dependencies]
 climetlab = "0.17.0"
 ai-models = "0.2.3"
 ai-models-panguweather = "^0.0.2"
-rioxarray = "^0.15.0"
-#ecmwf-opendata = "^0.2.0"
-#ecmwf-opendata = { path = "../ecmwf-opendata/", develop = true }
-ecmwf-opendata = { git = "https://github.com/djzurawski/ecmwf-opendata.git" }
-
-boto3 = "^1.33.10"
-s3fs = "^2023.12.2"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.5.1"

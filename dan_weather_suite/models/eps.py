@@ -13,7 +13,7 @@ class EpsLoader(ModelLoader):
         self.forecast_hours = list(
             range(0, self.forecast_length + self.step_size, self.step_size)
         )
-        self.client = Client(source="ecmwf")
+        self.client = Client(source="ecmwf", resol="0p25")
         self.grib_file = "grib/eps.grib"
         self.netcdf_file = "grib/eps.nc"
         self.z12_ready_time_utc = time(20, 30)
