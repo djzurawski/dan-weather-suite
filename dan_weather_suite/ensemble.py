@@ -16,11 +16,15 @@ import numpy as np
 from numpy.typing import NDArray
 from typing import Tuple
 import xarray as xr
+import traceback
+from typing import Literal, Iterable
 
 dask.config.set({"array.slicing.split_large_chunks": True})
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 logger = logging.getLogger("ensemble")
+
+EnsembleName = Literal["GEFS", "CMCE", "ECMWF"]
 
 
 class Ensemble:
@@ -194,87 +198,62 @@ def xtick_formatter(dt: datetime):
         return ""
 
 
-def plume_plot(
-    lon, lat, title="", models=[], downscale=True, return_bytes: bool = False
-):
-    LOADERS = {
-        "GEFS": (GefsLoader(), "GEFS", "red"),
-        "CMCE": (GepsLoader(), "CMCE", "blue"),
-        "ECMWF": (EpsLoader(), "ECMWF ENS", "green"),
-    }
-
-    if not models:
-        ensembles = [Ensemble(*loader) for loader in LOADERS.values()]
-    else:
-        ensembles = [Ensemble(*LOADERS[model]) for model in models]
-
-    fig, axs = plt.subplots(1, 2, figsize=(16, 5), sharey=True)
-    plt.tight_layout(pad=2)
-
-    all_plumes = []
-    for ensemble in ensembles:
-        times, plumes = ensemble.point_plumes(lon, lat, downscale=downscale)
-        for plume in plumes:
-            axs[0].plot(
-                times, plume, color=ensemble.plume_color, alpha=0.3, linewidth=1
-            )
-            all_plumes.append(plume)
-
-        mean = np.mean(plumes, axis=0)
-        axs[0].plot(
-            times,
-            mean,
-            color=ensemble.plume_color,
-            linewidth=3,
-            zorder=200,
-            label=ensemble.name,
-        )
-
-    axs[0].legend()
-
-    boxplot_data = np.array(all_plumes)
-    axs[1].boxplot(boxplot_data, showfliers=False, whis=(10, 90))
-    """
-    axs[1].violinplot(
-        boxplot_data,
-        showmeans=True,
-        showmedians=True,
-        showextrema=False,
-        widths=0.8,
+def get_point_plumes(ensemble, slr_ds, lon, lat, downscale=True, nearest=False):
+    times, precip_plumes = ensemble.point_plumes(
+        lon, lat, downscale=downscale, nearest=nearest
     )
-    """
 
-    times_ticks = times[::2]
-    times_labels = [xtick_formatter(utils.parse_np_datetime64(t)) for t in times_ticks]
-    axs[0].set_xticks(times_ticks, labels=times_labels)
-    axs[1].set_xticks(np.arange(1, len(times) + 1, 2), labels=times_labels)
+    # no t0 in nbm
+    slr_steps = [t - times[0] for t in times[1:]]
+    slr = slr_ds.interp(step=slr_steps).values
 
-    fig.suptitle(f"{title} precipitation (in) lat: {lat} lon: {lon}")
+    snow_plumes = np.zeros(precip_plumes.shape)
+    precip_rate = np.diff(precip_plumes, axis=1)
+    snow_rate = precip_rate * slr
+    snow_plumes[:, 1:] = np.cumsum(snow_rate, axis=1)
 
-    # vertical line at day 7
-    day_7 = int(168 / 6)
-    axs[0].axvline(times[day_7], color="gray", linestyle="--")
-    axs[1].axvline(day_7, color="gray", linestyle="--")
+    precip_mean = np.mean(precip_plumes, axis=0)
+    snow_mean = np.mean(snow_plumes, axis=0)
 
-    # turn second y axis labels on
-    axs[1].yaxis.set_tick_params(labelleft=True)
+    return times, precip_plumes, snow_plumes, precip_mean, snow_mean
 
-    axs[0].grid(axis="both", linestyle="--")
-    axs[1].grid(axis="both", linestyle="--")
 
-    if return_bytes:
-        with io.BytesIO() as bio:
-            plt.savefig(bio, format="jpg", bbox_inches="tight")
-            return bio.getvalue()
+def add_ensemble_plumes_to_plot(
+    axs,
+    times,
+    precip_plumes,
+    snow_plumes,
+    precip_mean,
+    snow_mean,
+    name: str,
+    color,
+    downscale=True,
+    nearest=False,
+):
 
-    plt.show()
+    for plume, snow_plume in zip(precip_plumes, snow_plumes):
+        axs[0, 0].plot(times, plume, color=color, alpha=0.3, linewidth=1)
+
+        axs[1, 0].plot(times, snow_plume, color=color, alpha=0.3, linewidth=1)
+
+    axs[0, 0].plot(times, precip_mean, color=color, linewidth=3, zorder=200, label=name)
+    axs[1, 0].plot(
+        times,
+        snow_mean,
+        color=color,
+        linewidth=3,
+        zorder=200,
+        label=name,
+    )
+
+    return axs
 
 
 def plume_plot_snow(
     lon,
     lat,
     title="",
-    models=[],
+    models: Iterable[EnsembleName] = ["GEFS", "CMCE", "ECMWF"],
     downscale=True,
     nearest=False,
     return_bytes: bool = False,
@@ -285,64 +264,43 @@ def plume_plot_snow(
         "ECMWF": (EpsLoader(), "ECMWF ENS", "green"),
     }
 
-    if not models:
-        ensembles = [Ensemble(*loader) for loader in LOADERS.values()]
-    else:
-        ensembles = [Ensemble(*LOADERS[model]) for model in models]
-
     nbm = NbmLoader()
     slr_ds = nbm.forecast_slr(lon, lat)
 
     fig, axs = plt.subplots(2, 2, figsize=(16, 10), sharey="row")
     fig.suptitle(f"{title} lat: {lat} lon: {lon}")
-    plt.tight_layout(
-        pad=3,
-    )
+    plt.tight_layout(pad=3)
 
     all_precip = []
     all_snow = []
-    for ensemble in ensembles:
-        times, plumes = ensemble.point_plumes(
-            lon, lat, downscale=downscale, nearest=nearest
-        )
-
-        # no t0 in nbm
-        slr_steps = [t - times[0] for t in times[1:]]
-        slr = slr_ds.interp(step=slr_steps).values
-
-        snow_plumes = np.zeros(plumes.shape)
-        precip_rate = np.diff(plumes, axis=1)
-        snow_rate = precip_rate * slr
-        snow_plumes[:, 1:] = np.cumsum(snow_rate, axis=1)
-        for plume, snow_plume in zip(plumes, snow_plumes):
-            axs[0, 0].plot(
-                times, plume, color=ensemble.plume_color, alpha=0.3, linewidth=1
+    for model in models:
+        try:
+            ensemble = Ensemble(*LOADERS[model])
+            times, precip_plumes, snow_plumes, precip_mean, snow_mean = (
+                get_point_plumes(ensemble, slr_ds, lon, lat, downscale, nearest)
             )
 
-            axs[1, 0].plot(
-                times, snow_plume, color=ensemble.plume_color, alpha=0.3, linewidth=1
-            )
-            all_precip.append(plume)
-            all_snow.append(snow_plume)
+            # no t0 in nbm
+            slr_steps = [t - times[0] for t in times[1:]]
+            slr = slr_ds.interp(step=slr_steps).values
 
-        precip_mean = np.mean(plumes, axis=0)
-        snow_mean = np.mean(snow_plumes, axis=0)
-        axs[0, 0].plot(
-            times,
-            precip_mean,
-            color=ensemble.plume_color,
-            linewidth=3,
-            zorder=200,
-            label=ensemble.name,
-        )
-        axs[1, 0].plot(
-            times,
-            snow_mean,
-            color=ensemble.plume_color,
-            linewidth=3,
-            zorder=200,
-            label=ensemble.name,
-        )
+            [all_precip.append(plume) for plume in precip_plumes]
+            [all_snow.append(plume) for plume in snow_plumes]
+
+            axs = add_ensemble_plumes_to_plot(
+                axs,
+                times,
+                precip_plumes,
+                snow_plumes,
+                precip_mean,
+                snow_mean,
+                ensemble.name,
+                ensemble.plume_color,
+            )
+
+        except Exception as e:
+            logger.error(f"Error plotting ensemble {model}: {e}")
+            traceback.print_exc()
 
     axs[0, 0].legend()
     axs[1, 0].legend()
