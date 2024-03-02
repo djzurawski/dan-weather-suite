@@ -28,6 +28,10 @@ logger = logging.getLogger("ensemble")
 EnsembleName = Literal["GEFS", "CMCE", "ECMWF"]
 
 
+def midpoints(x: np.ndarray) -> np.ndarray:
+    return (x[1:] + x[:-1]) / 2
+
+
 class Ensemble:
     def __init__(self, loader: ModelLoader, name="Ens", plume_color="red"):
         self.loader = loader
@@ -204,10 +208,20 @@ def get_point_plumes(ensemble, slr_da, lon, lat, downscale=True, nearest=False):
         lon, lat, downscale=downscale, nearest=nearest
     )
 
-    slr = slr_da.interp(step=ensemble.ds.step).values
+    # Add t0 to ensemble.steps if necessary
+    # Then multiply precip_rate at t by slr midpoint of t and t-1
+    ensemble_steps = ensemble.ds.step.values
+    zero_timedelta = np.timedelta64(0, 'ns')
+    if ensemble_steps[0] != zero_timedelta:
+        ensemble_steps = np.insert(ensemble_steps, 0, zero_timedelta)
+
+    slr = slr_da.interp(step=ensemble_steps).values
+    slr_midpoints = midpoints(slr)
+
     snow_plumes = np.zeros(precip_plumes.shape)
     precip_rate = np.diff(precip_plumes, axis=1)
-    snow_rate = precip_rate * slr
+
+    snow_rate = precip_rate * slr_midpoints
     snow_plumes[:, 1:] = np.cumsum(snow_rate, axis=1)
 
     precip_mean = np.mean(precip_plumes, axis=0)
@@ -306,10 +320,10 @@ def plume_plot_snow(
     axs[1, 1].boxplot(snow_boxplot_data, showfliers=False, whis=(10, 90))
 
     # SLR Line
-    slr_line_timedeltas = np.arange(6, 246, 6) * np.timedelta64(1, "h").astype(
+    slr_line_timedeltas = np.arange(0, 246, 6) * np.timedelta64(1, "h").astype(
         "timedelta64[ns]"
     )
-    slr_x = np.arange(2, len(slr_line_timedeltas) + 2)
+    slr_x = np.arange(1, len(slr_line_timedeltas) + 1)
     slr_y = slr_da.interp(step=slr_line_timedeltas)
     ax_slr = axs[1, 1].twinx()
     ax_slr.plot(slr_x, slr_y, color="gray", label="Snow Liquid Ratio")
