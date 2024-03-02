@@ -198,15 +198,12 @@ def xtick_formatter(dt: datetime):
         return ""
 
 
-def get_point_plumes(ensemble, slr_ds, lon, lat, downscale=True, nearest=False):
+def get_point_plumes(ensemble, slr_da, lon, lat, downscale=True, nearest=False):
     times, precip_plumes = ensemble.point_plumes(
         lon, lat, downscale=downscale, nearest=nearest
     )
 
-    # no t0 in nbm
-    slr_steps = [t - times[0] for t in times[1:]]
-    slr = slr_ds.interp(step=slr_steps).values
-
+    slr = slr_da.interp(step=ensemble.ds.step).values
     snow_plumes = np.zeros(precip_plumes.shape)
     precip_rate = np.diff(precip_plumes, axis=1)
     snow_rate = precip_rate * slr
@@ -265,7 +262,7 @@ def plume_plot_snow(
     }
 
     nbm = NbmLoader()
-    slr_ds = nbm.forecast_slr(lon, lat)
+    slr_da = nbm.forecast_slr(lon, lat)
 
     fig, axs = plt.subplots(2, 2, figsize=(16, 10), sharey="row")
     fig.suptitle(f"{title} lat: {lat} lon: {lon}")
@@ -277,12 +274,8 @@ def plume_plot_snow(
         try:
             ensemble = Ensemble(*LOADERS[model])
             times, precip_plumes, snow_plumes, precip_mean, snow_mean = (
-                get_point_plumes(ensemble, slr_ds, lon, lat, downscale, nearest)
+                get_point_plumes(ensemble, slr_da, lon, lat, downscale, nearest)
             )
-
-            # no t0 in nbm
-            slr_steps = [t - times[0] for t in times[1:]]
-            slr = slr_ds.interp(step=slr_steps).values
 
             [all_precip.append(plume) for plume in precip_plumes]
             [all_snow.append(plume) for plume in snow_plumes]
@@ -312,9 +305,13 @@ def plume_plot_snow(
     axs[1, 1].boxplot(snow_boxplot_data, showfliers=False, whis=(10, 90))
 
     # SLR Line
+    slr_line_timedeltas = np.arange(6, 246, 6) * np.timedelta64(1, "h").astype(
+        "timedelta64[ns]"
+    )
+    slr_x = np.arange(2, len(slr_line_timedeltas) + 2)
+    slr_y = slr_da.interp(step=slr_line_timedeltas)
     ax_slr = axs[1, 1].twinx()
-    slr_x = np.arange(2, len(slr) + 2)
-    ax_slr.plot(slr_x, slr, color="gray", label="Snow Liquid Ratio")
+    ax_slr.plot(slr_x, slr_y, color="gray", label="Snow Liquid Ratio")
     ax_slr.set_ylim((0, 30))
     ax_slr.legend()
     ax_slr.set_ylabel("Snow:Liquid Ratio")
