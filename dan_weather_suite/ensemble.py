@@ -278,8 +278,8 @@ def plume_plot_snow(
                 get_point_plumes(ensemble, slr_da, lon, lat, downscale, nearest)
             )
 
-            [all_precip.append(plume) for plume in precip_plumes]
-            [all_snow.append(plume) for plume in snow_plumes]
+            all_precip.extend(precip_plumes)
+            all_snow.extend(snow_plumes)
 
             axs = add_ensemble_plumes_to_plot(
                 axs,
