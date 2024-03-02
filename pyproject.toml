@@ -32,6 +32,7 @@ ai-models-panguweather = "^0.0.2"
 
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.5.1"
+isort = "^5.13.2"
 
 [build-system]
 requires = ["poetry-core"]
