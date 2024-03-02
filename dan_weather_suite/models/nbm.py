@@ -99,10 +99,22 @@ class NbmLoader(ModelLoader):
                     f.write(data)
                 ttime.sleep(0.1)
 
+    def extrapolate_to_init_time(self, ds: xr.Dataset) -> xr.Dataset:
+        "NBM does not come with init_time data, extrapolate to init time"
+        init_timedelta = np.timedelta64(0, "ns")
+        if ds.step[0] != init_timedelta:
+            steps = np.concatenate([[init_timedelta], ds.step.values])
+            ds = ds.interp(step=steps, kwargs={"fill_value": "extrapolate"})
+            new_times = ds.time + ds.step
+            ds = ds.assign_coords(valid_time=new_times)
+        return ds
+
     def process_grib(self) -> xr.Dataset:
         ds = xr.open_dataset(self.grib_file)
         ds = ds.rename({"unknown": "slr"})
         ds["longitude"] = (ds["longitude"] + 180) % 360 - 180
+        ds["slr"] = ds.slr.fillna(0).clip(0, None)
+        ds = self.extrapolate_to_init_time(ds)
         return ds
 
     def create_kdtree(self) -> KDTree:
@@ -136,6 +148,7 @@ class NbmLoader(ModelLoader):
 
         nearest_point_km, nearest_idx = min(nearest_points_idx, key=lambda x: x[0])
         logging.info(f"Nearest NBM: {pairs[nearest_idx]} {round(nearest_point_km,2)}km")
-
         nearest_row, nearest_col = divmod(nearest_idx, ds.latitude.shape[1])
-        return ds.slr[..., nearest_row, nearest_col]
+
+        point_slr = ds.slr[..., nearest_row, nearest_col]
+        return point_slr
