@@ -24,6 +24,7 @@ rioxarray = "^0.15.0"
 ecmwf-opendata = { git = "https://github.com/ecmwf/ecmwf-opendata.git", rev="7cc73beb0d04c22838b797b03c96cc47c7b423ee"}
 boto3 = "^1.33.10"
 s3fs = "^2023.12.2"
+tzfpy = "^0.15.3"
 
 [tool.poetry.group.ai.dependencies]
 climetlab = "0.17.0"
