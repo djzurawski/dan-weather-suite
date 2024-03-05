@@ -1,15 +1,29 @@
+import io
+from datetime import datetime
+from typing import Iterable
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from tzfpy import get_tz
+
+import dan_weather_suite.utils as utils
 from dan_weather_suite.models.hiresw_arw import (
-    HireswArwLoader,
     HireswArw2Loader,
+    HireswArwLoader,
     HireswFv3Loader,
 )
 from dan_weather_suite.models.hrrr import HrrrLoader
 from dan_weather_suite.models.nbm import NbmLoader
 from dan_weather_suite.models.rrfs import RrfsLoader
-import dan_weather_suite.utils as utils
-import io
-import numpy as np
-import matplotlib.pyplot as plt
+
+
+def localize_timestamps(
+    times: Iterable[np.datetime64], local_tz: str
+) -> list[datetime]:
+    "Localizes vald_times from models"
+    times = [pd.to_datetime(t).tz_localize("UTC").tz_convert(local_tz) for t in times]
+    return times
 
 
 def plume_plot(lon: float, lat: float, title="", return_bytes=False):
@@ -21,6 +35,8 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
     }
 
     ENSEMBLE_LOADERS = {"RRFS": RrfsLoader()}
+
+    local_tz = get_tz(lon, lat)
 
     nbm = NbmLoader(short_term=True)
     slr_ds = nbm.forecast_slr(lon, lat)
@@ -40,7 +56,7 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
 
         precip_raw = point_forecast.tp
         conversion = utils.swe_to_in(precip_raw.units)
-        times = precip_raw.valid_time.values
+        times = localize_timestamps(precip_raw.valid_time.values, local_tz)
 
         precip_in = conversion * precip_raw.values
 
@@ -71,8 +87,7 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
             member_forecast = point_forecast.sel(number=member)
             precip_raw = member_forecast.tp
             conversion = utils.swe_to_in(precip_raw.units)
-            times = precip_raw.valid_time.values
-
+            times = localize_timestamps(precip_raw.valid_time.values, local_tz)
             precip_in = conversion * precip_raw.values
 
             slr_da = slr_ds.interp(step=member_forecast.step)
@@ -154,18 +169,17 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
     axs[1, 0].legend()
 
     # SLR Line
+    slr_times = localize_timestamps(slr_da.valid_time.values, local_tz)
     ax_slr = axs[0, 1].twinx()
-    ax_slr.plot(
-        slr_da.valid_time.values, slr_da, color="gray", label="Snow Liquid Ratio"
-    )
+    ax_slr.plot(slr_times, slr_da, color="gray", label="Snow Liquid Ratio")
     ax_slr.set_ylim((0, 30))
     ax_slr.legend()
     ax_slr.set_ylabel("Snow:Liquid Ratio")
 
     ax_slr = axs[1, 1].twinx()
-    ax_slr.plot(
-        slr_da.valid_time.values, slr_da, color="gray", label="Snow Liquid Ratio"
-    )
+    # slr_times = [t.tz_convert(local_tz) for t in times]
+    ax_slr.plot(slr_times, slr_da, color="gray", label="Snow Liquid Ratio")
+
     ax_slr.set_ylim((0, 30))
     ax_slr.legend()
     ax_slr.set_ylabel("Snow:Liquid Ratio")
@@ -189,8 +203,8 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
     axs[1, 1].set_ylabel("Snow (in)")
 
     # Subplot xlabels
-    axs[1, 0].set_xlabel("Time (UTC)")
-    axs[1, 1].set_xlabel("Time (UTC)")
+    axs[1, 0].set_xlabel(f"Time ({local_tz})")
+    axs[1, 1].set_xlabel(f"Time ({local_tz})")
 
     if return_bytes:
         with io.BytesIO() as bio:
