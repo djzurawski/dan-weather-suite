@@ -110,7 +110,7 @@ class NbmLoader(ModelLoader):
         return ds
 
     def process_grib(self) -> xr.Dataset:
-        ds = xr.open_dataset(self.grib_file)
+        ds = xr.open_dataset(self.grib_file, chunks={})
         ds = ds.rename({"unknown": "slr"})
         ds["longitude"] = (ds["longitude"] + 180) % 360 - 180
         ds["slr"] = ds.slr.fillna(0).clip(0, None)
