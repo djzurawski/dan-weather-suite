@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Iterable, Tuple
 
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -138,6 +139,11 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
     hourly_precip_ax = axs[1, 0]
     hourly_snow_ax = axs[1, 1]
 
+    date_format = mdates.DateFormatter("%m-%d\n%I%p")
+    total_precip_ax.xaxis.set_major_formatter(date_format)
+    total_snow_ax.xaxis.set_major_formatter(date_format)
+    hourly_precip_ax.xaxis.set_major_formatter(date_format)
+    hourly_snow_ax.xaxis.set_major_formatter(date_format)
 
     for model_name in deterministic_models:
         times = precip_df.index
@@ -188,10 +194,22 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
     hourly_snow_mean = snow_rate_df.mean(axis=1)
 
     total_precip_ax.plot(
-        times, precip_mean, linewidth=3, color="black", zorder=200, label="mean"
+        times,
+        precip_mean,
+        linewidth=3,
+        color="black",
+        zorder=200,
+        label="mean",
+        linestyle="--",
     )
     total_snow_ax.plot(
-        times, snow_mean, linewidth=3, color="black", zorder=200, label="mean"
+        times,
+        snow_mean,
+        linewidth=3,
+        color="black",
+        zorder=200,
+        label="mean",
+        linestyle="--",
     )
 
     # hourly
@@ -202,6 +220,7 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
         color="black",
         zorder=200,
         label="mean",
+        linestyle="--",
     )
     hourly_snow_ax.plot(
         times,
@@ -210,6 +229,7 @@ def plume_plot(lon: float, lat: float, title="", return_bytes=False):
         color="black",
         zorder=200,
         label="mean",
+        linestyle="--",
     )
 
     # Remove duplicate entries on legend
