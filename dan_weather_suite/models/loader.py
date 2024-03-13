@@ -99,4 +99,4 @@ class ModelLoader(ABC):
         return ds
 
     def open_dataset(self) -> xr.Dataset:
-        return xr.open_dataset(self.netcdf_file, chunks={})
+        return xr.open_dataset(self.netcdf_file)
