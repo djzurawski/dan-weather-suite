@@ -272,7 +272,7 @@ def download_all_forecasts(cycle=None, force=False):
         "FV3": HireswFv3Loader(),
         "HRRR": HrrrLoader(),
         "RRFS": RrfsLoader(),
-        # "NBM": NbmLoader(short_term=True),
+        "NBM": NbmLoader(short_term=True),
     }
 
     for name, loader in LOADERS.items():
