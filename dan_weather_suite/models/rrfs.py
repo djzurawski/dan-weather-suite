@@ -97,8 +97,10 @@ def download_member_grib(init_dt: datetime, member: int, flength: int = 48) -> s
 class RrfsLoader(ModelLoader):
     def __init__(self):
         super().__init__()
+        self.step_size = 1
+        self.forecast_length = 60
         self.forecast_hours = list(
-            range(6, self.forecast_length + self.step_size, self.step_size)
+            range(1, self.forecast_length + self.step_size, self.step_size)
         )
         self.grib_file = "grib/rrfs.grib"
         self.netcdf_file = "grib/rrfs.nc"
@@ -132,7 +134,9 @@ class RrfsLoader(ModelLoader):
             futures = []
             members = range(self.num_members)
             for member in members:
-                future = pool.submit(download_member_grib, init_dt, member)
+                future = pool.submit(
+                    download_member_grib, init_dt, member, self.forecast_length
+                )
                 futures.append(future)
 
             for i, f in enumerate(futures):
