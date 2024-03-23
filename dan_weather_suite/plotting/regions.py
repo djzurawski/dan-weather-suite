@@ -79,7 +79,7 @@ SNOWBASIN = Label(text="Snowbasin", lat=41.2, lon=-111.863)
 # Montana
 BIG_SKY = Label(text="Big Sky", lat=45.27, lon=-111.45)
 
-MAMMOTH = Label(text="Mammoth", lat=37.636, lon=-119.028)
+MAMMOTH = Label(text="Mammoth", lat=37.641, lon=-119.024)
 
 # Wyoming
 GRAND_TARGHEE = Label(text="Grand Targhee", lat=43.787, lon=-110.936)
