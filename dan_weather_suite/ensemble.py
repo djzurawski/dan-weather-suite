@@ -1,6 +1,5 @@
 import io
 import logging
-import traceback
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from typing import Iterable, Literal, Tuple
@@ -218,15 +217,7 @@ def get_point_plumes(ensemble, slr_da, lon, lat, downscale=True, nearest=False):
 
     # Add t0 to ensemble.steps if necessary
     # Then multiply precip_rate at t by slr midpoint of t and t-1
-    """
-    ensemble_steps = ensemble.ds.step.values
-    zero_timedelta = np.timedelta64(0, 'ns')
-    if ensemble_steps[0] != zero_timedelta:
-        ensemble_steps = np.insert(ensemble_steps, 0, zero_timedelta)
-    """
     ds = ensemble.ds
-    # ds = ds.resample(valid_time="6h").interpolate()
-
     init_time = ds.time.values
     valid_times = ds.valid_time.values
     if valid_times[0] != init_time:
@@ -277,12 +268,12 @@ def add_ensemble_plumes_to_plot(
 
 
 def create_point_forecast_dfs(
-    lon,
-    lat,
+    lon: float,
+    lat: float,
     models: Iterable[EnsembleName] = ["GEFS", "CMCE", "ECMWF", "ICON"],
-    downscale=False,
-    nearest=False,
-):
+    downscale: bool = False,
+    nearest: bool = False,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     LOADERS = {
         "ICON": (IconLoader(), "ICON", "orange"),
         "GEFS": (GefsLoader(), "GEFS", "red"),

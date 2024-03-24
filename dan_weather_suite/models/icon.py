@@ -4,15 +4,12 @@ from datetime import datetime, time, timedelta
 from typing import Tuple
 
 import numpy as np
-import simplekml
 import xarray as xr
 from scipy.interpolate import LinearNDInterpolator
-from scipy.spatial import KDTree
 
 import dan_weather_suite.plotting.regions as regions
 import dan_weather_suite.utils as utils
 from dan_weather_suite.models.loader import ModelLoader
-from dan_weather_suite.plotting import plot
 
 
 class IconLoader(ModelLoader):
@@ -151,7 +148,7 @@ class IconLoader(ModelLoader):
                 "valid_time": ds.valid_time.values,
                 "latitude": grid_lats,
                 "longitude": grid_lons,
-                "time": ds.valid_time.values[0]
+                "time": ds.valid_time.values[0],
             },
             attrs=ds.tp.attrs,
         )
@@ -159,91 +156,3 @@ class IconLoader(ModelLoader):
         ds_grid = ds_grid.transpose("number", "valid_time", "latitude", "longitude")
         # ds = ds.sortby(["longitude", "latitude"])
         return ds_grid
-
-
-def dist2():
-    df = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_single-level_2024032312_168_tot_prec.grib2"
-    )
-
-    df = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_time-invariant_2024032312_elat.grib2"
-    )
-
-    df_lats = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_time-invariant_2024032312_clat.grib2"
-    )
-    lats = df_lats.tlat
-
-    df_lons = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_time-invariant_2024032312_clon.grib2"
-    )
-    lons = df_lons.tlon
-
-    lon_filter = (lons > -117) & (lons < -100)
-    lat_filter = (lats > 31) & (lats < 45)
-
-    coord_filter = lon_filter & lat_filter
-
-    lons = lons[coord_filter].values
-    lats = lats[coord_filter].values
-
-    lon0 = lons[0]
-    lat0 = lats[0]
-
-    distances = []
-
-    points = np.array(list(zip(lons, lats)))
-    tree = KDTree(points)
-
-    for point in points:
-        dists, idxs = tree.query(point, 4)
-
-        closest = points[idxs]
-        point_dists = []
-        for lon1, lat1 in closest:
-            point_dists.append(utils.haversine(points[1], points[0], lat1, lon1))
-        avg = np.mean(point_dists)
-        distances.append(avg)
-
-    return distances
-
-
-def google_earth():
-    df = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_single-level_2024032312_168_tot_prec.grib2"
-    )
-
-    df = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_time-invariant_2024032312_elat.grib2"
-    )
-
-    df_lats = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_time-invariant_2024032312_clat.grib2"
-    )
-    lats = df_lats.tlat
-
-    df_lons = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_time-invariant_2024032312_clon.grib2"
-    )
-    lons = df_lons.tlon
-
-    lon_filter = (lons > -117) & (lons < -100)
-    lat_filter = (lats > 31) & (lats < 45)
-
-    coord_filter = lon_filter & lat_filter
-
-    lons2 = lons[coord_filter].values
-    lats2 = lats[coord_filter].values
-
-    kml = simplekml.Kml()
-
-    # Add points to the KML
-    for lat, lon in zip(lats2, lons2):
-        point = kml.newpoint(
-            name="Point", coords=[(lon, lat)]
-        )  # Note: KML expects lon, lat order
-        # point.style.iconstyle.icon.href = 'http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png'  # Optional: set a placemark icon
-
-    # Save the KML file
-    kml.save("my_points.kml")
