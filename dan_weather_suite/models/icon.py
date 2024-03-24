@@ -1,18 +1,18 @@
-import xarray as xr
-from scipy.interpolate import SmoothBivariateSpline, LinearNDInterpolator
-import numpy as np
-from dan_weather_suite.plotting import plot
-from dan_weather_suite import utils
-import simplekml
-from scipy.spatial import KDTree
-
-from dan_weather_suite.models.loader import ModelLoader
-import dan_weather_suite.utils as utils
+import bz2
+import os
 from datetime import datetime, time, timedelta
 from typing import Tuple
+
+import numpy as np
+import simplekml
 import xarray as xr
-import os
-import bz2
+from scipy.interpolate import LinearNDInterpolator
+from scipy.spatial import KDTree
+
+import dan_weather_suite.plotting.regions as regions
+import dan_weather_suite.utils as utils
+from dan_weather_suite.models.loader import ModelLoader
+from dan_weather_suite.plotting import plot
 
 
 class IconLoader(ModelLoader):
@@ -109,11 +109,18 @@ class IconLoader(ModelLoader):
         ds_lons = xr.open_dataset(self.lons_path)
         lats = ds_lats.tlat
         lons = ds_lons.tlon
-        ds = xr.open_dataset(self.grib_file, chunks = {})
+        ds = xr.open_dataset(self.grib_file, chunks={})
         ds = ds.swap_dims({"step": "valid_time"})
 
-        lon_filter = (lons > -125) & (lons < -60)
-        lat_filter = (lats > 25) & (lats < 60)
+        extent = regions.CONUS_EXTENT
+
+        top = extent.top
+        bottom = extent.bottom
+        left = extent.left
+        right = extent.right
+
+        lon_filter = (lons > left) & (lons < right)
+        lat_filter = (lats > bottom) & (lats < top)
 
         coord_filter = lon_filter & lat_filter
 
@@ -122,36 +129,36 @@ class IconLoader(ModelLoader):
 
         native_coords = np.column_stack((lons, lats))
 
-        grid_lats = np.arange(-180, 180, 0.125)
-        grid_lons = np.arange(-90, 90, 0.125)
+        grid_lons = np.arange(left, right, 0.125)
+        grid_lats = np.arange(bottom, top, 0.125)
+
         # our grid to interpolate to
-        grid_lons, grid_lats = np.meshgrid(grid_lons, grid_lats)
+        X, Y = np.meshgrid(grid_lons, grid_lats)
 
-        import time
+        values = ds.tp.values[:, :, coord_filter]
 
-        data_arrays = []
-        for number in ds.number.values:
-            member_forecast = []
-            t0 = time.time()
-            for valid_time in ds.valid_time.values:
+        # transpose values for required interpolator shape
+        interpolator = LinearNDInterpolator(native_coords, values.T)
+        Z = interpolator(X, Y)
+        # transpose back
+        Z = Z.T
 
-                z = ds.sel(number=number, valid_time=valid_time).tp.values[coord_filter]
-                print(z.shape)
-                interpolator = LinearNDInterpolator(native_coords, z)
-                interped = interpolator(grid_lons, grid_lats)
-                member_forecast.append(interped)
-            print(time.time() - t0)
-
-            member_da = xr.DataArray(data=member_forecast,
-                                     dims=["valid_time", "latitude", "longitude"],
-                                     coords = {"valid_time": ds.valid_time.values,
-                                               "latitude": grid_lats[:, 0],
-                                               "longitude": grid_lons[0, :]})
-            data_arrays.append(member_da)
-
-        combined_da = xr.concat(data_arrays, dim='number')
-
-        return combined_da
+        da = xr.DataArray(
+            data=Z,
+            dims=["number", "valid_time", "longitude", "latitude"],
+            coords={
+                "number": ds.number.values,
+                "valid_time": ds.valid_time.values,
+                "latitude": grid_lats,
+                "longitude": grid_lons,
+                "time": ds.valid_time.values[0]
+            },
+            attrs=ds.tp.attrs,
+        )
+        ds_grid = xr.Dataset({"tp": da}, attrs=ds.attrs)
+        ds_grid = ds_grid.transpose("number", "valid_time", "latitude", "longitude")
+        # ds = ds.sortby(["longitude", "latitude"])
+        return ds_grid
 
 
 def dist2():
@@ -240,45 +247,3 @@ def google_earth():
 
     # Save the KML file
     kml.save("my_points.kml")
-
-
-def grid():
-    import time
-    df = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_single-level_2024032312_168_tot_prec.grib2"
-    )
-    #df = xr.open_dataset("grib/icon-raw.nc").isel(step=20)
-
-    df_lats = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_time-invariant_2024032312_clat.grib2"
-    )
-    lats = df_lats.tlat
-
-    df_lons = xr.open_dataset(
-        "/home/dan/Downloads/icon-eps_global_icosahedral_time-invariant_2024032312_clon.grib2"
-    )
-    lons = df_lons.tlon
-
-    xy = np.c_[lons, lats]
-    z = df.tp.mean(dim="number")
-
-    conversion = utils.swe_to_in("kg m**-2")
-
-    t0 = time.time()
-    lut2 = LinearNDInterpolator(xy, z)
-    X = np.arange(-180, 180, 0.125)
-    Y = np.arange(-90, 90, 0.125)
-    X, Y = np.meshgrid(X, Y)
-    interped = lut2(X, Y)
-    print("interp")
-    #plot_precip(X, Y, interped * conversion)
-    #print("plot")
-    print(time.time() - t0)
-
-
-
-def tst():
-    member_da = xr.DataArray(data=values[0],
-                             coords = {"latitude": lats,
-                                       "longitude": lons},
-                             dims = ["latitude", "longitude"])

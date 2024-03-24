@@ -25,6 +25,7 @@ ecmwf-opendata = { git = "https://github.com/ecmwf/ecmwf-opendata.git", rev="7cc
 boto3 = "^1.33.10"
 s3fs = "^2023.12.2"
 tzfpy = "^0.15.3"
+dask = "^2024.2.1"
 
 [tool.poetry.group.ai.dependencies]
 climetlab = "0.17.0"
@@ -34,6 +35,9 @@ ai-models-panguweather = "^0.0.2"
 [tool.poetry.group.dev.dependencies]
 mypy = "^1.5.1"
 isort = "^5.13.2"
+black = "^24.2.0"
+jedi = "^0.19.1"
+flake8 = "^7.0.0"
 
 [build-system]
 requires = ["poetry-core"]

@@ -50,26 +50,27 @@ class ModelLoader(ABC):
         if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
             logging.info(f"Downloading grib {cycle}")
             self.download_grib(cycle)
-            logging.info("Processing grib")
-            ds = self.process_grib()
-            logging.info("Setting CONUS extent")
-            extent = regions.PRISM_EXTENT
-            ds = utils.set_ds_extent(ds, extent)
-            retries = 0
-            while retries <= 3:
-                try:
-                    logging.info("Saving to NETCDF")
-                    if force and os.path.exists(self.netcdf_file):
-                        os.remove(self.netcdf_file)
-                    ds.to_netcdf(self.netcdf_file)
-                    logging.info("Up to date")
-                    return True
-                except Exception as e:
-                    logging.error(f"Error saving NETCDF {self.netcdf_file}: {e}")
-                    ttime.sleep(3)
-                    retries += 1
 
-            return False
+        logging.info("Processing grib")
+        ds = self.process_grib()
+        logging.info("Setting CONUS extent")
+        extent = regions.PRISM_EXTENT
+        ds = utils.set_ds_extent(ds, extent)
+        retries = 0
+        while retries <= 3:
+            try:
+                logging.info("Saving to NETCDF")
+                if force and os.path.exists(self.netcdf_file):
+                    os.remove(self.netcdf_file)
+                ds.to_netcdf(self.netcdf_file)
+                logging.info("Up to date")
+                return True
+            except Exception as e:
+                logging.error(f"Error saving NETCDF {self.netcdf_file}: {e}")
+                ttime.sleep(3)
+                retries += 1
+
+        return False
 
     @abstractmethod
     def download_grib(self):
@@ -95,6 +96,7 @@ class ModelLoader(ABC):
         ds_c_expanded = ds_c.expand_dims("number", axis=1)
 
         ds = xr.concat([ds_c_expanded, ds_p], "number")
+        ds = ds.swap_dims({"step": "valid_time"})
 
         return ds
 

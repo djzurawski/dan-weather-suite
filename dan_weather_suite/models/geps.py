@@ -56,7 +56,7 @@ class GepsLoader(ModelLoader):
                 f"CMC_geps-raw_APCP_SFC_0_latlon0p5x0p5_{day_str}_P{fhour_str}_allmbrs"
                 ".grib2"
             ),
-            root_url,
+            {}
         )
 
     def process_grib(self) -> xr.Dataset:
