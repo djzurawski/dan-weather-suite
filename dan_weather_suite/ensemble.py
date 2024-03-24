@@ -2,6 +2,7 @@ import io
 import logging
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
+import traceback
 from typing import Iterable, Literal, Tuple
 
 import dask
@@ -286,20 +287,28 @@ def create_point_forecast_dfs(
     snow_df = pd.DataFrame()
 
     for model_name in models:
-        ensemble = Ensemble(*LOADERS[model_name])
-        times, precip_plumes, snow_plumes, precip_mean, snow_mean = get_point_plumes(
-            ensemble, slr_da, lon, lat, downscale, nearest
-        )
+        try:
+            ensemble = Ensemble(*LOADERS[model_name])
+            times, precip_plumes, snow_plumes, precip_mean, snow_mean = (
+                get_point_plumes(ensemble, slr_da, lon, lat, downscale, nearest)
+            )
 
-        precip_columns = [f"{model_name}_precip_{i}" for i in range(len(precip_plumes))]
-        snow_columns = [f"{model_name}_snow_{i}" for i in range(len(precip_plumes))]
-        model_precip_df = pd.DataFrame(
-            precip_plumes.T, index=times, columns=precip_columns
-        )
-        model_snow_df = pd.DataFrame(snow_plumes.T, index=times, columns=snow_columns)
+            precip_columns = [
+                f"{model_name}_precip_{i}" for i in range(len(precip_plumes))
+            ]
+            snow_columns = [f"{model_name}_snow_{i}" for i in range(len(precip_plumes))]
+            model_precip_df = pd.DataFrame(
+                precip_plumes.T, index=times, columns=precip_columns
+            )
+            model_snow_df = pd.DataFrame(
+                snow_plumes.T, index=times, columns=snow_columns
+            )
 
-        precip_df = precip_df.join(model_precip_df, how="outer")
-        snow_df = snow_df.join(model_snow_df, how="outer")
+            precip_df = precip_df.join(model_precip_df, how="outer")
+            snow_df = snow_df.join(model_snow_df, how="outer")
+        except Exception as e:
+            traceback.print_exc()
+            print(e)
 
     return precip_df, snow_df
 
@@ -317,7 +326,7 @@ def plume_plot_snow(
     model_colors = {"GEFS": "red", "CMCE": "blue", "ECMWF": "green", "ICON": "orange"}
 
     precip_df, snow_df = create_point_forecast_dfs(
-        lon, lat, downscale=downscale, nearest=nearest
+        lon, lat, downscale=downscale, nearest=nearest, models=models
     )
 
     nbm = NbmLoader()
