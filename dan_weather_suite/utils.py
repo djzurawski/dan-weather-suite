@@ -11,6 +11,9 @@ from scipy.spatial import KDTree
 import requests
 from typing import Tuple
 import xarray as xr
+import bz2
+
+DECOMPRESSORS = {"bz2": bz2.decompress}
 
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
@@ -26,8 +29,9 @@ def parse_np_datetime64(t: np.datetime64) -> datetime:
 
 
 def np_timedelta64_to_hour(td: np.timedelta64) -> float:
-    h = td.astype('timedelta64[ns]') / (3600 * 10**9)
+    h = td.astype("timedelta64[ns]") / (3600 * 10**9)
     return h.astype(float)
+
 
 def intepolate_to_fhour(fhours_interp, fhours, values):
     return np.interp(fhours_interp, fhours, values)
@@ -73,13 +77,15 @@ def swe_to_in(units: str) -> float:
 
 def set_ds_extent(ds: xr.Dataset, extent: regions.Extent) -> xr.Dataset:
     # prevent slicing from creating large chunk and causing huge memory usage
-    with dask.config.set(**{'array.slicing.split_large_chunks': True}):
+    with dask.config.set(**{"array.slicing.split_large_chunks": True}):
         left = extent.left
         right = extent.right
         top = extent.top
         bottom = extent.bottom
-        x_condition = (ds.longitude >= left) & (ds.longitude <= right)
-        y_condition = (ds.latitude >= bottom) & (ds.latitude <= top)
+        x_condition = (ds.longitude >= left).compute() & (
+            ds.longitude <= right
+        ).compute()
+        y_condition = (ds.latitude >= bottom).compute() & (ds.latitude <= top).compute()
         trimmed = ds.where(x_condition & y_condition, drop=True)
         return trimmed
 
@@ -102,9 +108,20 @@ def download_bytes(url: str, params: dict = {}) -> bytes:
         return None
 
 
-def download_and_combine_gribs(urls: list[Tuple[str, dict]], threads=2) -> bytes:
+def download_and_combine_gribs(
+    urls: list[Tuple[str, dict]], threads=2, compression: str | None = None
+) -> bytes:
     with ThreadPoolExecutor(threads) as executor:
+
         results = list(executor.map(lambda x: download_bytes(*x), urls))
+
+        if compression:
+            if compression not in DECOMPRESSORS:
+                raise ValueError(f"{compression} decompression not implemented")
+
+            decompressor = DECOMPRESSORS[compression]
+            results = [decompressor(res) for res in results]
+
         concatenated_bytes = b"".join(
             result for result in results if result is not None
         )
