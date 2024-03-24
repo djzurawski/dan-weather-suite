@@ -224,6 +224,11 @@ def get_point_plumes(ensemble, slr_da, lon, lat, downscale=True, nearest=False):
         valid_times = np.insert(valid_times, 0, init_time)
 
     slr = slr_da.interp(valid_time=times).values
+    slr_df = pd.DataFrame(slr)
+    slr_df = slr_df.ffill()
+    slr_df = slr_df.bfill()
+    slr = slr_df.to_numpy()[:, 0]
+
     slr_midpoints = midpoints(slr)
 
     snow_plumes = np.zeros(precip_plumes.shape)
@@ -255,14 +260,7 @@ def add_ensemble_plumes_to_plot(
         axs[1, 0].plot(times, snow_plume, color=color, alpha=0.3, linewidth=1)
 
     axs[0, 0].plot(times, precip_mean, color=color, linewidth=3, zorder=200, label=name)
-    axs[1, 0].plot(
-        times,
-        snow_mean,
-        color=color,
-        linewidth=3,
-        zorder=200,
-        label=name,
-    )
+    axs[1, 0].plot(times, snow_mean, color=color, linewidth=3, zorder=200, label=name)
 
     return axs
 
@@ -292,6 +290,7 @@ def create_point_forecast_dfs(
         times, precip_plumes, snow_plumes, precip_mean, snow_mean = get_point_plumes(
             ensemble, slr_da, lon, lat, downscale, nearest
         )
+
         precip_columns = [f"{model_name}_precip_{i}" for i in range(len(precip_plumes))]
         snow_columns = [f"{model_name}_snow_{i}" for i in range(len(precip_plumes))]
         model_precip_df = pd.DataFrame(
