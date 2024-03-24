@@ -100,7 +100,7 @@ class Ensemble:
 
         elif downscale:
             ratio = self.downscale_ds.interp(latitude=lat, longitude=lon).ratio
-            logger.info(f"Ratio {ratio.values} at {lat},{lon}")
+            logger.info(f"Ratio {self.name} {ratio.values} at {lat},{lon}")
             precip = ratio * precip
 
         plumes = []
@@ -298,8 +298,8 @@ def create_point_forecast_dfs(
         )
         model_snow_df = pd.DataFrame(snow_plumes.T, index=times, columns=snow_columns)
 
-        precip_df = precip_df.join(model_precip_df, how="right")
-        snow_df = snow_df.join(model_snow_df, how="right")
+        precip_df = precip_df.join(model_precip_df, how="outer")
+        snow_df = snow_df.join(model_snow_df, how="outer")
 
     return precip_df, snow_df
 
