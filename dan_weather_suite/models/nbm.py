@@ -110,11 +110,12 @@ class NbmLoader(ModelLoader):
         return ds
 
     def process_grib(self) -> xr.Dataset:
-        ds = xr.open_dataset(self.grib_file, chunks={})
+        ds = xr.open_dataset(self.grib_file, chunks={"step": 1})
         ds = ds.rename({"unknown": "slr"})
         ds["longitude"] = (ds["longitude"] + 180) % 360 - 180
         ds["slr"] = ds.slr.fillna(0).clip(0, None)
         ds = self.extrapolate_to_init_time(ds)
+        ds = ds.swap_dims({"step": "valid_time"})
         return ds
 
     def create_kdtree(self) -> KDTree:

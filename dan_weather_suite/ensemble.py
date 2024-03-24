@@ -1,6 +1,5 @@
 import io
 import logging
-import traceback
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
 from typing import Iterable, Literal, Tuple
@@ -16,16 +15,20 @@ import dan_weather_suite.utils as utils
 from dan_weather_suite.models.eps import EpsLoader
 from dan_weather_suite.models.gefs import GefsLoader
 from dan_weather_suite.models.geps import GepsLoader
+from dan_weather_suite.models.icon import IconLoader
 from dan_weather_suite.models.loader import ModelLoader
 from dan_weather_suite.models.nbm import NbmLoader
 from dan_weather_suite.plotting import plot
+
+import pandas as pd
+
 
 dask.config.set({"array.slicing.split_large_chunks": True})
 
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 logger = logging.getLogger("ensemble")
 
-EnsembleName = Literal["GEFS", "CMCE", "ECMWF"]
+EnsembleName = Literal["GEFS", "CMCE", "ECMWF", "ICON"]
 
 
 def midpoints(x: np.ndarray) -> np.ndarray:
@@ -56,6 +59,7 @@ class Ensemble:
         self, lon: float, lat: float, downscale=True, nearest=False, accum_snow=False
     ) -> Tuple[NDArray[np.datetime64], NDArray[float]]:
         ds = self.ds
+
         prepend_t0 = not self._forecast_starts_at_init()
 
         units = ds.tp.units
@@ -67,6 +71,8 @@ class Ensemble:
             )
         else:
             precip = conversion * ds.tp.interp(latitude=lat, longitude=lon)
+
+        precip = precip.resample(valid_time="6h").interpolate()
 
         times = precip.valid_time.values
         # add t0 to ensembles which forecast starts at 6h
@@ -94,7 +100,7 @@ class Ensemble:
 
         elif downscale:
             ratio = self.downscale_ds.interp(latitude=lat, longitude=lon).ratio
-            logger.info(f"Ratio {ratio.values} at {lat},{lon}")
+            logger.info(f"Ratio {self.name} {ratio.values} at {lat},{lon}")
             precip = ratio * precip
 
         plumes = []
@@ -170,8 +176,9 @@ def download_all_forecasts(cycle=None, force=False):
         gefs = executor.submit(download_loader_forecast, GefsLoader, cycle, force=force)
         geps = executor.submit(download_loader_forecast, GepsLoader, cycle, force=force)
         eps = executor.submit(download_loader_forecast, EpsLoader, cycle, force=force)
+        icon = executor.submit(download_loader_forecast, IconLoader, cycle, force=force)
 
-        futures = [gefs, geps, eps]
+        futures = [gefs, geps, eps, icon]
         ensemble_res = [f.result() for f in futures]
 
         nbm = NbmLoader()
@@ -210,12 +217,18 @@ def get_point_plumes(ensemble, slr_da, lon, lat, downscale=True, nearest=False):
 
     # Add t0 to ensemble.steps if necessary
     # Then multiply precip_rate at t by slr midpoint of t and t-1
-    ensemble_steps = ensemble.ds.step.values
-    zero_timedelta = np.timedelta64(0, 'ns')
-    if ensemble_steps[0] != zero_timedelta:
-        ensemble_steps = np.insert(ensemble_steps, 0, zero_timedelta)
+    ds = ensemble.ds
+    init_time = ds.time.values
+    valid_times = ds.valid_time.values
+    if valid_times[0] != init_time:
+        valid_times = np.insert(valid_times, 0, init_time)
 
-    slr = slr_da.interp(step=ensemble_steps).values
+    slr = slr_da.interp(valid_time=times).values
+    slr_df = pd.DataFrame(slr)
+    slr_df = slr_df.ffill()
+    slr_df = slr_df.bfill()
+    slr = slr_df.to_numpy()[:, 0]
+
     slr_midpoints = midpoints(slr)
 
     snow_plumes = np.zeros(precip_plumes.shape)
@@ -239,8 +252,6 @@ def add_ensemble_plumes_to_plot(
     snow_mean,
     name: str,
     color,
-    downscale=True,
-    nearest=False,
 ):
 
     for plume, snow_plume in zip(precip_plumes, snow_plumes):
@@ -249,28 +260,20 @@ def add_ensemble_plumes_to_plot(
         axs[1, 0].plot(times, snow_plume, color=color, alpha=0.3, linewidth=1)
 
     axs[0, 0].plot(times, precip_mean, color=color, linewidth=3, zorder=200, label=name)
-    axs[1, 0].plot(
-        times,
-        snow_mean,
-        color=color,
-        linewidth=3,
-        zorder=200,
-        label=name,
-    )
+    axs[1, 0].plot(times, snow_mean, color=color, linewidth=3, zorder=200, label=name)
 
     return axs
 
 
-def plume_plot_snow(
-    lon,
-    lat,
-    title="",
-    models: Iterable[EnsembleName] = ["GEFS", "CMCE", "ECMWF"],
-    downscale=True,
-    nearest=False,
-    return_bytes: bool = False,
-):
+def create_point_forecast_dfs(
+    lon: float,
+    lat: float,
+    models: Iterable[EnsembleName] = ["GEFS", "CMCE", "ECMWF", "ICON"],
+    downscale: bool = False,
+    nearest: bool = False,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     LOADERS = {
+        "ICON": (IconLoader(), "ICON", "orange"),
         "GEFS": (GefsLoader(), "GEFS", "red"),
         "CMCE": (GepsLoader(), "CMCE", "blue"),
         "ECMWF": (EpsLoader(), "ECMWF ENS", "green"),
@@ -279,52 +282,95 @@ def plume_plot_snow(
     nbm = NbmLoader()
     slr_da = nbm.forecast_slr(lon, lat)
 
+    precip_df = pd.DataFrame()
+    snow_df = pd.DataFrame()
+
+    for model_name in models:
+        ensemble = Ensemble(*LOADERS[model_name])
+        times, precip_plumes, snow_plumes, precip_mean, snow_mean = get_point_plumes(
+            ensemble, slr_da, lon, lat, downscale, nearest
+        )
+
+        precip_columns = [f"{model_name}_precip_{i}" for i in range(len(precip_plumes))]
+        snow_columns = [f"{model_name}_snow_{i}" for i in range(len(precip_plumes))]
+        model_precip_df = pd.DataFrame(
+            precip_plumes.T, index=times, columns=precip_columns
+        )
+        model_snow_df = pd.DataFrame(snow_plumes.T, index=times, columns=snow_columns)
+
+        precip_df = precip_df.join(model_precip_df, how="outer")
+        snow_df = snow_df.join(model_snow_df, how="outer")
+
+    return precip_df, snow_df
+
+
+def plume_plot_snow(
+    lon,
+    lat,
+    title="",
+    models: Iterable[EnsembleName] = ["GEFS", "CMCE", "ECMWF", "ICON"],
+    downscale=True,
+    nearest=False,
+    return_bytes: bool = False,
+):
+
+    model_colors = {"GEFS": "red", "CMCE": "blue", "ECMWF": "green", "ICON": "orange"}
+
+    precip_df, snow_df = create_point_forecast_dfs(
+        lon, lat, downscale=downscale, nearest=nearest
+    )
+
+    nbm = NbmLoader()
+    slr_da = nbm.forecast_slr(lon, lat)
+
     fig, axs = plt.subplots(2, 2, figsize=(16, 10), sharey="row")
     fig.suptitle(f"{title} lat: {lat} lon: {lon}")
     plt.tight_layout(pad=3)
 
-    all_precip = []
-    all_snow = []
-    for model in models:
-        try:
-            ensemble = Ensemble(*LOADERS[model])
-            times, precip_plumes, snow_plumes, precip_mean, snow_mean = (
-                get_point_plumes(ensemble, slr_da, lon, lat, downscale, nearest)
-            )
+    for model_name in models:
 
-            all_precip.extend(precip_plumes)
-            all_snow.extend(snow_plumes)
+        model_precip_df = precip_df.filter(like=model_name)
+        model_snow_df = snow_df.filter(like=model_name)
+        times = precip_df.index
+        precip_plumes = model_precip_df.to_numpy()
+        snow_plumes = model_snow_df.to_numpy()
 
-            axs = add_ensemble_plumes_to_plot(
-                axs,
-                times,
-                precip_plumes,
-                snow_plumes,
-                precip_mean,
-                snow_mean,
-                ensemble.name,
-                ensemble.plume_color,
-            )
+        precip_mean = model_precip_df.mean(axis=1).to_numpy()
+        snow_mean = model_snow_df.mean(axis=1).to_numpy()
 
-        except Exception as e:
-            logger.error(f"Error plotting ensemble {model}: {e}")
-            traceback.print_exc()
+        color = model_colors.get(model_name, "orange")
+
+        axs = add_ensemble_plumes_to_plot(
+            axs,
+            times,
+            precip_plumes.T,
+            snow_plumes.T,
+            precip_mean,
+            snow_mean,
+            model_name,
+            color,
+        )
 
     axs[0, 0].legend()
     axs[1, 0].legend()
 
     # Boxplots
-    precip_boxplot_data = np.array(all_precip)
-    snow_boxplot_data = np.array(all_snow)
-    axs[0, 1].boxplot(precip_boxplot_data, showfliers=False, whis=(10, 90))
-    axs[1, 1].boxplot(snow_boxplot_data, showfliers=False, whis=(10, 90))
+    precip_boxplot_data = precip_df.to_numpy().T
+    snow_boxplot_data = snow_df.to_numpy().T
+
+    # Filter data using np.isnan
+    # https://stackoverflow.com/a/44306965
+    precip_mask = ~np.isnan(precip_boxplot_data)
+    filtered_precip = [d[m] for d, m in zip(precip_boxplot_data.T, precip_mask.T)]
+    snow_mask = ~np.isnan(snow_boxplot_data)
+    filtered_snow = [d[m] for d, m in zip(snow_boxplot_data.T, snow_mask.T)]
+
+    axs[0, 1].boxplot(filtered_precip, showfliers=False, whis=(10, 90))
+    axs[1, 1].boxplot(filtered_snow, showfliers=False, whis=(10, 90))
 
     # SLR Line
-    slr_line_timedeltas = np.arange(0, 246, 6) * np.timedelta64(1, "h").astype(
-        "timedelta64[ns]"
-    )
-    slr_x = np.arange(1, len(slr_line_timedeltas) + 1)
-    slr_y = slr_da.interp(step=slr_line_timedeltas)
+    slr_x = np.arange(1, len(snow_df) + 1)
+    slr_y = slr_da.interp(valid_time=snow_df.index)
     ax_slr = axs[1, 1].twinx()
     ax_slr.plot(slr_x, slr_y, color="gray", label="Snow Liquid Ratio")
     ax_slr.set_ylim((0, 30))
@@ -332,7 +378,7 @@ def plume_plot_snow(
     ax_slr.set_ylabel("Snow:Liquid Ratio")
 
     # Set xaxis labels
-    times_ticks = times[::2]
+    times_ticks = precip_df.index[::2]
     times_labels = [xtick_formatter(utils.parse_np_datetime64(t)) for t in times_ticks]
     axs[0, 0].set_xticks(times_ticks, labels=times_labels)
     axs[1, 0].set_xticks(times_ticks, labels=times_labels)

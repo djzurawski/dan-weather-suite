@@ -87,7 +87,7 @@ class GefsLoader(ModelLoader):
 
     def process_grib(self) -> xr.Dataset:
         ds = super().process_grib()
-        ds["tp"] = ds.tp.cumsum(dim="step", keep_attrs=True)
+        ds["tp"] = ds.tp.cumsum(dim="valid_time", keep_attrs=True)
         #ds["tp"].attrs["long_name"] = "Total Precipitation"
         #ds["tp"].attrs["units"] = "kg m**-2"
         ds["longitude"] = (ds["longitude"] + 180) % 360 - 180
