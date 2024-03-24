@@ -37,7 +37,7 @@ def intepolate_to_fhour(fhours_interp, fhours, values):
     return np.interp(fhours_interp, fhours, values)
 
 
-def round_to_nearest(x: float, options: Iterable[float] = (0.25, 0.4, 0.5)) -> float:
+def round_to_nearest(x: float, options: Iterable[float] = (0.125, 0.25, 0.4, 0.5)) -> float:
     "Rounds x to the nearest value in 'options'"
     assert options, "options cannot be empty"
 
