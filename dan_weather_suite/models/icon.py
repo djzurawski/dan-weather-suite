@@ -126,8 +126,8 @@ class IconLoader(ModelLoader):
 
         native_coords = np.column_stack((lons, lats))
 
-        grid_lons = np.arange(left, right, 0.125)
-        grid_lats = np.arange(bottom, top, 0.125)
+        grid_lons = np.arange(left, right, 0.25)
+        grid_lats = np.arange(bottom, top, 0.25)
 
         # our grid to interpolate to
         X, Y = np.meshgrid(grid_lons, grid_lats)
