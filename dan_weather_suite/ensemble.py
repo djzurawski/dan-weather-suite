@@ -307,6 +307,7 @@ def create_point_forecast_dfs(
             precip_df = precip_df.join(model_precip_df, how="outer")
             snow_df = snow_df.join(model_snow_df, how="outer")
         except Exception as e:
+            print(f"Error creating dataframe for {model_name}")
             traceback.print_exc()
             print(e)
 
@@ -338,27 +339,32 @@ def plume_plot_snow(
 
     for model_name in models:
 
-        model_precip_df = precip_df.filter(like=model_name)
-        model_snow_df = snow_df.filter(like=model_name)
-        times = precip_df.index
-        precip_plumes = model_precip_df.to_numpy()
-        snow_plumes = model_snow_df.to_numpy()
+        try:
+            model_precip_df = precip_df.filter(like=model_name)
+            model_snow_df = snow_df.filter(like=model_name)
+            times = precip_df.index
+            precip_plumes = model_precip_df.to_numpy()
+            snow_plumes = model_snow_df.to_numpy()
 
-        precip_mean = model_precip_df.mean(axis=1).to_numpy()
-        snow_mean = model_snow_df.mean(axis=1).to_numpy()
+            precip_mean = model_precip_df.mean(axis=1).to_numpy()
+            snow_mean = model_snow_df.mean(axis=1).to_numpy()
 
-        color = model_colors.get(model_name, "orange")
+            color = model_colors.get(model_name, "orange")
 
-        axs = add_ensemble_plumes_to_plot(
-            axs,
-            times,
-            precip_plumes.T,
-            snow_plumes.T,
-            precip_mean,
-            snow_mean,
-            model_name,
-            color,
-        )
+            axs = add_ensemble_plumes_to_plot(
+                axs,
+                times,
+                precip_plumes.T,
+                snow_plumes.T,
+                precip_mean,
+                snow_mean,
+                model_name,
+                color,
+            )
+        except Exception as e:
+            print(f"Error plotting {model_name}")
+            traceback.print_exc()
+            print(e)
 
     axs[0, 0].legend()
     axs[1, 0].legend()
