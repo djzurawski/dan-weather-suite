@@ -24,13 +24,14 @@ def format_member_prefix(init_dt: datetime, fhour: int, member: int) -> str:
     if member == 0:
         prefix = (
             f"rrfs_a/rrfs_a.{day_str}/{cycle_str}/control/rrfs.t{cycle_str}z"
-            f".prslev.f{fhour_str}.conus_3km.grib2"
+            f".prslev.f{fhour_str}.conus.grib2"
         )
 
     else:
+        mem_str = str(member).zfill(2)
         prefix = (
             f"rrfs_a/rrfs_a.{day_str}/{cycle_str}/mem000{member}/rrfs"
-            f".t{cycle_str}z.prslev.f{fhour_str}.conus_3km.grib2"
+            f".t{cycle_str}z.m{mem_str}.prslev.f{fhour_str}.conus.grib2"
         )
 
     return prefix
