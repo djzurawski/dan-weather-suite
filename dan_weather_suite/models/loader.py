@@ -28,7 +28,7 @@ class ModelLoader(ABC):
         Checks if grib on disk is latest forecast
         """
 
-        ds = xr.open_dataset(self.netcdf_file, chunks={})
+        ds = xr.open_dataset(self.grib_file, chunks={})
         forecast_init = isoparse(str(ds.time.values))
         latest_init = self.get_latest_init()
         if cycle is not None:
@@ -47,7 +47,7 @@ class ModelLoader(ABC):
                 # delete netcdf later to preserve website uptime
                 os.remove(self.netcdf_file)
 
-        if not os.path.exists(self.netcdf_file) or not self.is_current(cycle):
+        if not os.path.exists(self.grib_file) or not self.is_current(cycle):
             logging.info(f"Downloading grib {cycle}")
             self.download_grib(cycle)
 
@@ -62,7 +62,9 @@ class ModelLoader(ABC):
                 logging.info("Saving to NETCDF")
                 if force and os.path.exists(self.netcdf_file):
                     os.remove(self.netcdf_file)
-                ds.to_netcdf(self.netcdf_file)
+
+                ds.to_netcdf(self.netcdf_file, format="NETCDF4", engine="h5netcdf")
+
                 logging.info("Up to date")
                 return True
             except Exception as e:
