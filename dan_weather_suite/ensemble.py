@@ -1,13 +1,14 @@
 import io
 import logging
+import traceback
 from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime
-import traceback
 from typing import Iterable, Literal, Tuple
 
 import dask
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import xarray as xr
 from numpy.typing import NDArray
 
@@ -20,9 +21,6 @@ from dan_weather_suite.models.icon import IconLoader
 from dan_weather_suite.models.loader import ModelLoader
 from dan_weather_suite.models.nbm import NbmLoader
 from dan_weather_suite.plotting import plot
-
-import pandas as pd
-
 
 dask.config.set({"array.slicing.split_large_chunks": True})
 
@@ -181,10 +179,11 @@ def download_all_forecasts(cycle=None, force=False):
 
         futures = [gefs, geps, eps, icon]
         ensemble_res = [f.result() for f in futures]
+        print(ensemble_res)
 
-        nbm = NbmLoader()
-        nbm_res = nbm.download_forecast(cycle=cycle, force=force)
-        return ensemble_res + [nbm_res]
+    nbm = NbmLoader()
+    nbm_res = nbm.download_forecast(cycle, force)
+    print(nbm_res)
 
 
 def plot_compare(ens: Ensemble, fhour=84):
@@ -272,7 +271,9 @@ def create_point_forecast_dfs(
     models: Iterable[EnsembleName] = ["GEFS", "CMCE", "ECMWF", "ICON"],
     downscale: bool = False,
     nearest: bool = False,
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> Tuple[pd.DataFrame, pd.DataFrame, xr.DataArray]:
+    "Gets all data needed for the plots"
+
     LOADERS = {
         "ICON": (IconLoader(), "ICON", "orange"),
         "GEFS": (GefsLoader(), "GEFS", "red"),
@@ -311,30 +312,23 @@ def create_point_forecast_dfs(
             traceback.print_exc()
             print(e)
 
-    return precip_df, snow_df
+    return precip_df, snow_df, slr_da
 
 
-def plume_plot_snow(
-    lon,
-    lat,
-    title="",
+def make_plot(
+    precip_df: pd.DataFrame,
+    snow_df: pd.DataFrame,
+    slr_da: xr.DataArray,
+    location_title="",
+    aggregate_title="Accumulated",
     models: Iterable[EnsembleName] = ["GEFS", "CMCE", "ECMWF", "ICON"],
-    downscale=True,
-    nearest=False,
     return_bytes: bool = False,
 ):
 
     model_colors = {"GEFS": "red", "CMCE": "blue", "ECMWF": "green", "ICON": "orange"}
 
-    precip_df, snow_df = create_point_forecast_dfs(
-        lon, lat, downscale=downscale, nearest=nearest, models=models
-    )
-
-    nbm = NbmLoader()
-    slr_da = nbm.forecast_slr(lon, lat)
-
     fig, axs = plt.subplots(2, 2, figsize=(16, 10), sharey="row")
-    fig.suptitle(f"{title} lat: {lat} lon: {lon}")
+    fig.suptitle(location_title)
     plt.tight_layout(pad=3)
 
     for model_name in models:
@@ -419,10 +413,10 @@ def plume_plot_snow(
     axs[1, 1].grid(axis="both", linestyle="--")
 
     # Subplot titles
-    axs[0, 0].title.set_text("Accumulated Precipitation")
-    axs[0, 1].title.set_text("Accumulated Precipitation")
-    axs[1, 0].title.set_text("Accumulated Snow")
-    axs[1, 1].title.set_text("Accumulated Snow")
+    axs[0, 0].title.set_text(f"{aggregate_title} Precipitation")
+    axs[0, 1].title.set_text(f"{aggregate_title} Precipitation")
+    axs[1, 0].title.set_text(f"{aggregate_title} Snow")
+    axs[1, 1].title.set_text(f"{aggregate_title} Snow")
 
     # Subplot ylabels
     axs[0, 0].set_ylabel("Precip (in)")
@@ -437,3 +431,63 @@ def plume_plot_snow(
             return bio.getvalue()
 
     plt.show()
+
+
+def accumlated_plot(
+    lon,
+    lat,
+    location_title="",
+    models: Iterable[EnsembleName] = ["GEFS", "CMCE", "ECMWF", "ICON"],
+    downscale=False,
+    nearest=False,
+    return_bytes: bool = False,
+):
+
+    precip_df, snow_df, slr_da = create_point_forecast_dfs(
+        lon, lat, downscale=downscale, nearest=nearest, models=models
+    )
+
+    return make_plot(
+        precip_df,
+        snow_df,
+        slr_da,
+        location_title=location_title,
+        aggregate_title="Accumulated",
+        models=models,
+        return_bytes=return_bytes,
+    )
+
+
+def rolling_window_plot(
+    lon,
+    lat,
+    periods_6hr: int = 4,
+    aggregate_title: str = "24hr",
+    location_title: str = "",
+    models: Iterable[EnsembleName] = ["GEFS", "CMCE", "ECMWF", "ICON"],
+    downscale=False,
+    nearest=False,
+    return_bytes: bool = False,
+):
+
+    precip_df, snow_df, slr_da = create_point_forecast_dfs(
+        lon, lat, downscale=downscale, nearest=nearest, models=models
+    )
+
+    precip_rolling = precip_df.diff().rolling(
+        window=periods_6hr, min_periods=periods_6hr
+    )
+    precip_rolling = precip_rolling.sum().dropna(how="all")
+
+    snow_rolling = snow_df.diff().rolling(window=periods_6hr, min_periods=periods_6hr)
+    snow_rolling = snow_rolling.sum().dropna(how="all")
+
+    return make_plot(
+        precip_rolling,
+        snow_rolling,
+        slr_da,
+        location_title=location_title,
+        aggregate_title=aggregate_title,
+        models=models,
+        return_bytes=return_bytes,
+    )

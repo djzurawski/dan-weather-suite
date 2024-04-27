@@ -12,6 +12,7 @@ from typing import Tuple
 import time as ttime
 import xarray as xr
 
+
 logging.basicConfig(format="%(asctime)s %(message)s", level=logging.INFO)
 
 
@@ -34,6 +35,7 @@ class NbmLoader(ModelLoader):
         else:
             self.grib_file = "grib/nbm.grib"
             self.netcdf_file = "grib/nbm.nc"
+
 
     def get_latest_init(self) -> datetime:
         current_utc = datetime.utcnow()
@@ -116,7 +118,9 @@ class NbmLoader(ModelLoader):
         ds["slr"] = ds.slr.fillna(0).clip(0, None)
         ds = self.extrapolate_to_init_time(ds)
         ds = ds.swap_dims({"step": "valid_time"})
+        ds = ds.chunk({"valid_time": 1})
         return ds
+
 
     def create_kdtree(self) -> KDTree:
         "Create KD tree of ds coordinates"
